@@ -508,140 +508,50 @@ func handleAddTemplate(store storage.DataStore, moduleID, templateName string) {
 		log.Fatalf("Error loading module metadata for ID %s: %v", moduleID, err)
 	}
 
-	// 2. Check if template name already exists
+	// 2. Check if template name already exists in metadata
 	for _, t := range module.Templates {
 		if t.Name == templateName {
-			log.Fatalf("Error: Template '%s' already exists in module %s.", templateName, moduleID)
+			log.Fatalf("Error: Template '%s' already exists in module %s metadata.", templateName, moduleID)
 		}
 	}
 
-	// 3. Determine paths
-	templateSubDir := "templates"
-	fullPath := filepath.Join(module.Directory, templateSubDir, templateName)
-	relativePath := filepath.Join(templateSubDir, templateName)
-
-	// Ensure the templates subdirectory exists
-	if err := fsutils.CreateDir(filepath.Join(module.Directory, templateSubDir)); err != nil {
-		log.Fatalf("Error ensuring templates directory exists for module %s: %v", moduleID, err)
+	// 3. Call the generator to create the physical template file
+	modulesDir := filepath.Dir(module.Directory) // Get the parent dir (e.g., "modules")
+	err = generator.AddTemplateToModule(moduleID, templateName, modulesDir)
+	if err != nil {
+		log.Fatalf("Error creating template file via generator: %v", err)
 	}
 
-	// 4. Create the template file with basic content based on extension
-	var defaultContent []byte
-	ext := filepath.Ext(templateName)
-	switch ext {
-	case ".html":
-		// Define block suitable for inclusion
-		defineName := strings.TrimSuffix(templateName, ext) // Use filename without extension for define
-		defaultContent = []byte(fmt.Sprintf("{{ define \"%s\" }}\n    <!-- Content for %s -->\n    <div>\n        Placeholder content for %s\n    </div>\n{{ end }}\n", defineName, templateName, templateName))
-	case ".css":
-		// Basic CSS comment
-		defaultContent = []byte("/* Styles for " + templateName + " */\n")
-	case ".js":
-		// Basic JS comment
-		defaultContent = []byte("// Script for " + templateName + "\n")
-	default:
-		// Default to empty content for other file types
-		defaultContent = []byte("")
+	// 4. Determine the next order number
+	maxOrder := -1
+	for _, t := range module.Templates {
+		if t.Order > maxOrder {
+			maxOrder = t.Order
+		}
 	}
-
-	if err := fsutils.WriteToFile(fullPath, defaultContent); err != nil {
-		log.Fatalf("Error creating new template file '%s': %v", fullPath, err)
-	}
-	fmt.Printf("Created template file with default content: %s\n", fullPath)
+	newOrder := maxOrder + 1
 
 	// 5. Create new Template metadata
-	newOrder := len(module.Templates)
+	templateSubDir := "templates"
+	relativePath := filepath.Join(templateSubDir, templateName)
 	newTemplate := model.Template{
-		Name:     templateName,
-		Path:     relativePath,
-		IsBase:   false,
-		Order:    newOrder,
-		InsertID: "",
+		Name:   templateName,
+		Path:   relativePath,
+		IsBase: false,
+		Order:  newOrder,
 	}
 
-	// 6. Append to module's template list
+	// 6. Append to module's template list in metadata
 	module.Templates = append(module.Templates, newTemplate)
 	module.LastUpdated = time.Now()
 
 	// 7. Save updated module metadata
 	if err := store.SaveModule(module); err != nil {
-		log.Fatalf("Error updating module metadata for ID %s: %v", moduleID, err)
+		log.Fatalf("Error updating module metadata for ID %s after adding template: %v", moduleID, err)
 	}
 
-	fmt.Println("Template added successfully and metadata updated.")
-
-	// --- New: Auto-insert HTML template into base.html ---
-	if ext == ".html" {
-		baseHTMLPath := filepath.Join(module.Directory, templateSubDir, "base.html")
-		defineName := strings.TrimSuffix(templateName, ext)
-		newLine := fmt.Sprintf("    {{ template \"%s\" . }}\n", defineName)
-
-		fmt.Printf("Attempting to auto-insert template reference into %s\n", baseHTMLPath)
-		err := insertLineBeforeEnd(baseHTMLPath, newLine)
-		if err != nil {
-			log.Printf("Warning: Failed to auto-insert template reference into %s: %v", baseHTMLPath, err)
-			fmt.Println("You may need to manually add the template reference to base.html.")
-		} else {
-			fmt.Printf("Successfully inserted template reference for '%s' into base.html\n", defineName)
-		}
-	}
-	// --- End New ---
+	fmt.Printf("Template '%s' added successfully and metadata updated with order %d.\n", templateName, newOrder)
 }
-
-// --- New Helper Function ---
-// insertLineBeforeEnd reads a file, finds the last line containing "{{ end }}",
-// and inserts the newLine string just before it.
-func insertLineBeforeEnd(filePath, newLine string) error {
-	contentBytes, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read file %s: %w", filePath, err)
-	}
-
-	lines := strings.Split(string(contentBytes), "\n")
-	// Trim trailing newline if present to avoid issues finding the last line
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-
-	// Find the index of the last line containing "{{ end }}"
-	endIndex := -1
-	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.Contains(lines[i], "{{ end }}") {
-			endIndex = i
-			break
-		}
-	}
-
-	if endIndex == -1 {
-		return fmt.Errorf("could not find '{{ end }}' marker in %s", filePath)
-	}
-
-	// Insert the new line before the end line
-	// Ensure newLine ends with a newline character for proper formatting
-	if !strings.HasSuffix(newLine, "\n") {
-		newLine += "\n"
-	}
-	var newLines []string
-	newLines = append(newLines, lines[:endIndex]...)
-	newLines = append(newLines, newLine)
-	newLines = append(newLines, lines[endIndex:]...)
-
-	// Join lines back and write to file
-	newContent := strings.Join(newLines, "\n")
-	// Ensure the file ends with a newline
-	if !strings.HasSuffix(newContent, "\n") {
-		newContent += "\n"
-	}
-
-	err = os.WriteFile(filePath, []byte(newContent), 0644) // Use appropriate file permissions
-	if err != nil {
-		return fmt.Errorf("failed to write updated content to %s: %w", filePath, err)
-	}
-
-	return nil
-}
-
-// --- End New Helper Function ---
 
 func handlePurgeRemovedModules(store storage.DataStore) {
 	fmt.Println("\nAttempting to purge all removed modules...")

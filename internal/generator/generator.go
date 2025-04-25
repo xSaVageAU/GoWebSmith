@@ -5,7 +5,6 @@ import (
 	"go-module-builder/internal/model"
 	"go-module-builder/pkg/fsutils"
 	"log"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -45,12 +44,19 @@ func sanitizePackageName(name string) string {
 
 // DefaultGeneratorConfig provides a standard configuration for module generation.
 func DefaultGeneratorConfig(baseDir string) Config {
-	// Updated default content for base.html - Minimal version
+	// Updated default content for base.html - Uses PageData fields
 	const defaultBaseHTMLContent = `{{ define "page" }}
 <style>
-    {{ template "module-style" . }}
+    {{/* Pass the .Module field from PageData to the style template */}}
+    {{ template "module-style" .Module }}
 </style>
-<!-- Sub-templates will be added here -->
+<div class="module-content"> <!-- Added a wrapper div -->
+    <h2>Module: {{ .Module.Name }} (ID: {{ .Module.ID }})</h2>
+    <p>This is the base template for the module.</p>
+    <p>Status: {{ .Module.Status }}</p>
+    <!-- Inject pre-rendered content from Go handler -->
+    {{ .RenderedContent }}
+</div>
 {{ end }}`
 
 	// Updated default content for style.css - Removed .module-content
@@ -186,7 +192,9 @@ func GenerateModuleBoilerplate(cfg Config, moduleName, moduleID string) (*model.
 	return newModule, nil
 }
 
-// AddTemplateToModule adds a new template file and updates base.html and style.css
+// AddTemplateToModule adds a new template file.
+// It no longer modifies base.html or style.css.
+// The CLI command is responsible for updating the module's JSON metadata.
 func AddTemplateToModule(moduleID, templateName, modulesDir string) error {
 	moduleTemplatesDir := filepath.Join(modulesDir, moduleID, "templates")
 
@@ -204,53 +212,6 @@ func AddTemplateToModule(moduleID, templateName, modulesDir string) error {
 	}
 	fmt.Printf("Created template file: %s\n", newTemplateFilePath)
 
-	baseHTMLPath := filepath.Join(moduleTemplatesDir, "base.html")
-	baseContentBytes, err := os.ReadFile(baseHTMLPath)
-	if err != nil {
-		return fmt.Errorf("failed to read base.html: %w", err)
-	}
-	baseContent := string(baseContentBytes)
-
-	insertionPoint := "<!-- Sub-templates will be added here -->"
-	templateCall := fmt.Sprintf(`    {{ template "%s" . }}`, templateFileName)
-	newBaseContent := strings.Replace(baseContent, insertionPoint, templateCall+"\n    "+insertionPoint, 1)
-
-	if newBaseContent == baseContent {
-		log.Printf("Warning: Could not find insertion point '%s' in %s. Appending before {{ end }}.", insertionPoint, baseHTMLPath)
-		insertionPoint = "{{ end }}"
-		newBaseContent = strings.Replace(baseContent, insertionPoint, "    "+templateCall+"\n"+insertionPoint, 1)
-	}
-
-	if err := fsutils.WriteToFile(baseHTMLPath, []byte(newBaseContent)); err != nil {
-		return fmt.Errorf("failed to update base.html: %w", err)
-	}
-	fmt.Printf("Updated base.html: %s\n", baseHTMLPath)
-
-	styleCSSPath := filepath.Join(moduleTemplatesDir, "style.css")
-	styleContentBytes, err := os.ReadFile(styleCSSPath)
-	if err != nil {
-		return fmt.Errorf("failed to read style.css: %w", err)
-	}
-	styleContent := string(styleContentBytes)
-
-	newStylePlaceholder := fmt.Sprintf(`
-/* ==== %s SUB-TEMPLATE STYLES ==== */
-/* Add styles for .%s-template here */
-`, templateFileName, templateFileName)
-
-	endStyleDefine := "{{ end }}"
-	newStyleContent := strings.Replace(styleContent, endStyleDefine, newStylePlaceholder+endStyleDefine, 1)
-
-	if newStyleContent == styleContent {
-		log.Printf("Warning: Could not find '{{ end }}' in %s. Appending CSS placeholder.", styleCSSPath)
-		newStyleContent = styleContent + newStylePlaceholder
-	}
-
-	if err := fsutils.WriteToFile(styleCSSPath, []byte(newStyleContent)); err != nil {
-		return fmt.Errorf("failed to update style.css: %w", err)
-	}
-	fmt.Printf("Updated style.css: %s\n", styleCSSPath)
-
-	log.Printf("Successfully added template '%s' to module %s", templateName, moduleID)
+	log.Printf("Successfully created template file '%s' for module %s. Remember to update module metadata.", templateName, moduleID)
 	return nil
 }
