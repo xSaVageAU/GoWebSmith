@@ -28,3 +28,11 @@ server.exe
 # Personal Notes / Logs
 chat*.md
 PLAN.md
+
+# Module data and generated files
+.module_metadata/
+modules/
+modules_removed/
+
+# Temporary files
+Last task.md

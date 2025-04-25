@@ -19,6 +19,7 @@ type Module struct {
 	Name        string     `json:"name"`      // User-friendly name (e.g., "Product Card", "Header")
 	Directory   string     `json:"directory"` // Path to the module's root directory
 	Status      string     `json:"status"`    // Status of the module (e.g., "active", "removed")
+	Order       int        `json:"order"`     // Order for display/processing
 	CreatedAt   time.Time  `json:"createdAt"`
 	LastUpdated time.Time  `json:"lastUpdated"`
 	Templates   []Template `json:"templates"` // List of templates belonging to this module

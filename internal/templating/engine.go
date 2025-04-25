@@ -32,34 +32,39 @@ func (e *Engine) CombineTemplates(moduleID string) (string, error) {
 		return "", fmt.Errorf("cannot preview module %s because it is marked as removed", moduleID)
 	}
 
-	// 2. Gather all template file paths for this module
-	var templateFiles []string
-	for _, tmpl := range module.Templates {
-		// Construct absolute path based on module directory
-		absPath := filepath.Join(module.Directory, tmpl.Path)
-		templateFiles = append(templateFiles, absPath)
-	}
-
-	if len(templateFiles) == 0 {
-		return "", fmt.Errorf("no template files found for module %s", moduleID)
-	}
-
-	// 3. Parse all template files together
-	// We use the module ID as a base name for the template set for clarity
-	// Funcs(nil) is added just in case we need functions later
-	tmplSet, err := template.New(moduleID).Funcs(nil).ParseFiles(templateFiles...)
+	// 2. Gather all template file paths for this module using Glob
+	templatesDir := filepath.Join(module.Directory, "templates")
+	pattern := filepath.Join(templatesDir, "*.[th][mt][lm]l") // Glob for *.html and *.tmpl
+	htmlFiles, err := filepath.Glob(pattern)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse templates for module %s: %w", moduleID, err)
+		return "", fmt.Errorf("error finding html/tmpl template files for module %s: %w", moduleID, err)
+	}
+
+	// Glob specifically for *.css files containing template definitions
+	cssPattern := filepath.Join(templatesDir, "*.css")
+	cssFiles, err := filepath.Glob(cssPattern)
+	if err != nil {
+		return "", fmt.Errorf("error finding css template files for module %s: %w", moduleID, err)
+	}
+
+	// Combine the file lists
+	allTemplateFiles := append(htmlFiles, cssFiles...)
+
+	if len(allTemplateFiles) == 0 {
+		return "", fmt.Errorf("no template files (.html, .tmpl, .css) found in %s", templatesDir)
+	}
+
+	// 3. Parse all discovered template files together
+	// Use the module ID as a base name for the template set for clarity
+	tmplSet, err := template.New(moduleID).Funcs(nil).ParseFiles(allTemplateFiles...)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse templates from %s: %w", templatesDir, err)
 	}
 
 	// 4. Execute the main "page" template into a buffer
 	var buf bytes.Buffer
-	// We execute the template named "page" by convention (from base.html)
-	// Pass a simple map containing the ModuleName for now, as the template uses it.
-	executionData := map[string]string{
-		"ModuleName": module.Name,
-	}
-	err = tmplSet.ExecuteTemplate(&buf, "page", executionData)
+	// Pass module data to the template execution
+	err = tmplSet.ExecuteTemplate(&buf, "page", module)
 	if err != nil {
 		// Check if the error message indicates the template wasn't defined
 		if strings.Contains(err.Error(), "template \"page\" is undefined") || strings.Contains(err.Error(), "template \"page\" not defined") {
