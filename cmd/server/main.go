@@ -136,6 +136,49 @@ func generateSelfSignedCert(certPath, keyPath string) error {
 	return nil
 }
 
+// New function to set up the router
+func createServerMux() *http.ServeMux {
+	mux := http.NewServeMux()
+
+	// Determine static directory path
+	// Using the global projectRoot for now. A cleaner approach might pass it as an argument.
+	if projectRoot == "" {
+		// Attempt to get it if not set (e.g., during testing)
+		wd, err := os.Getwd()
+		if err != nil {
+			log.Printf("CRITICAL: Could not get working directory for mux setup: %v", err)
+			// Depending on requirements, might return nil or panic
+			return nil // Indicate failure
+		}
+		// Assuming cmd/server is one level down from the project root
+		projectRoot = filepath.Dir(wd)
+		log.Printf("Mux Setup: Determined projectRoot: %s", projectRoot)
+	}
+	staticDir := filepath.Join(projectRoot, "web", "static")
+	modulesDir := filepath.Join(projectRoot, "modules") // Needed for module static handler
+
+	log.Printf("Mux Setup: Serving static files from: %s", staticDir)
+	log.Printf("Mux Setup: Serving module static files relative to: %s", modulesDir)
+
+	// Setup static file servers
+	fs := http.FileServer(http.Dir(staticDir))
+	mux.Handle("/static/", http.StripPrefix("/static/", fs))
+	// Module static files - Pass modulesDir to the handler if needed, or rely on global projectRoot
+	mux.HandleFunc("/modules/", handleModuleStaticRequest) // Keep existing handler
+
+	// Define page handlers
+	mux.HandleFunc("/", handleRootRequest)
+	mux.HandleFunc("/view/module/", handleModulePageRequest)
+
+	// Conditionally register the module list handler
+	// Note: isModuleListEnabled is global, accessed here.
+	if isModuleListEnabled {
+		mux.HandleFunc("/modules/list", handleModuleListRequest)
+	}
+
+	return mux
+}
+
 func main() {
 	// 1. Define and parse command-line flags
 	port := flag.String("port", "8443", "Port to listen on for HTTPS") // Default to 8443 for HTTPS
@@ -154,22 +197,16 @@ func main() {
 
 	// Get working directory and store globally
 	var err error
-	projectRoot, err = os.Getwd()
+	projectRoot, err = os.Getwd() // Set the global projectRoot here
 	if err != nil {
 		log.Fatalf("Error getting working directory: %v", err)
 	}
-	staticDir := filepath.Join(projectRoot, "web", "static")
 	metadataDir := filepath.Join(projectRoot, ".module_metadata")  // Path to metadata
 	templatesDir := filepath.Join(projectRoot, "web", "templates") // Path to main templates
 	modulesDir := filepath.Join(projectRoot, "modules")            // Path to modules directory
-	log.Printf("Serving static files from: %s", staticDir)
 	log.Printf("Loading module metadata from: %s", metadataDir)
 	log.Printf("Loading layout templates from: %s", templatesDir)
-
-	// Ensure static directory exists (optional, but good practice)
-	if err := os.MkdirAll(staticDir, 0755); err != nil {
-		log.Printf("Warning: Could not create static directory %s: %v", staticDir, err)
-	}
+	log.Printf("Using modules directory: %s", modulesDir)
 
 	// --- Module Discovery ---
 	store, err := storage.NewJSONStore(metadataDir)
@@ -295,23 +332,10 @@ func main() {
 	log.Println("Finished template preparation.")
 	// --- End Template Parsing ---
 
-	// 2. Create a new ServeMux (router)
-	mux := http.NewServeMux()
-
-	// 3. Setup static file servers
-	// Main static files
-	fs := http.FileServer(http.Dir(staticDir))
-	mux.Handle("/static/", http.StripPrefix("/static/", fs))
-	// Module static files
-	mux.HandleFunc("/modules/", handleModuleStaticRequest) // Add handler for module static files
-
-	// 4. Define page handlers
-	mux.HandleFunc("/", handleRootRequest)
-	mux.HandleFunc("/view/module/", handleModulePageRequest) // Renamed handler and changed path
-
-	// Conditionally register the module list handler
-	if isModuleListEnabled {
-		mux.HandleFunc("/modules/list", handleModuleListRequest)
+	// 2. Create a new ServeMux (router) using the extracted function
+	mux := createServerMux()
+	if mux == nil {
+		log.Fatalf("Failed to create server mux.") // Handle nil return from createServerMux
 	}
 
 	// 5. Check for certs, generate if needed, and start HTTPS server
