@@ -44,13 +44,13 @@ func sanitizePackageName(name string) string {
 
 // DefaultGeneratorConfig provides a standard configuration for module generation.
 func DefaultGeneratorConfig(baseDir string) Config {
-	// Updated default content for base.html - Uses PageData fields
+	// Updated default content for base.html - Wraps style call, uses .Module/.RenderedContent
 	const defaultBaseHTMLContent = `{{ define "page" }}
-<style>
-    {{/* Pass the .Module field from PageData to the style template */}}
-    {{ template "module-style" .Module }}
-</style>
 <div class="module-content"> <!-- Added a wrapper div -->
+    <style>
+        {{/* Pass the .Module field from PageData to the style template */}}
+        {{ template "module-style" .Module }}
+    </style>
     <h2>Module: {{ .Module.Name }} (ID: {{ .Module.ID }})</h2>
     <p>This is the base template for the module.</p>
     <p>Status: {{ .Module.Status }}</p>
@@ -59,16 +59,16 @@ func DefaultGeneratorConfig(baseDir string) Config {
 </div>
 {{ end }}`
 
-	// Updated default content for style.css - Removed .module-content
+	// Updated default content for style.css - Uses HTML comments
 	const defaultStyleCSSContent = `{{ define "module-style" }}
-/* Base styles for module {{ .Name }} */
+<!-- Base styles for module {{ .Name }} -->
 
-/* Add specific styles for your module below */
+<!-- Add specific styles for your module below -->
 
-/* 
+<!--
  * ==== SUB-TEMPLATES STYLES ====
  * CSS for sub-templates will be added below this line
- */
+ -->
 {{ end }}`
 
 	handlerGoContent := `package {{ .PackageName }} // Dynamic package name

@@ -3,42 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Include HTMX library -->
     <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
     <title>{{ block "title" . }}Go Module Builder{{ end }}</title>
-    <!-- Link to a main CSS file if needed, e.g., /static/main.css -->
-    <link rel="stylesheet" href="/static/test.css"> <!-- Using test.css for now -->
+    <link rel="stylesheet" href="/static/test.css">
 </head>
 <body class="gmb-main-layout">
     <header>
         <h1>My Site Header</h1>
         <nav>
-            <!-- Main site navigation -->
             <a href="/">Home</a>
-            <!-- Add HTMX test link -->
-            <a href="#" 
-               hx-get="/view/module/b042cd6a-d886-4fa3-8dca-7e6ebbc14676" 
-               hx-target="#main-content"
-               hx-swap="innerHTML"
-               hx-push-url="true">
-                Load Test Module (HTMX)
-            </a>
+            {{ if .IsModuleListEnabled }}
+                | <a href="/modules/list">View Modules</a>
+            {{ end }}
         </nav>
-        <!-- Update span to check for .Module first, then access .Module.Name -->
-        <span id="module-header-info">{{ if .Module }}Module: {{ .Module.Name }}{{ end }}</span>
+        <span id="module-header-info">
+            {{ if eq (printf "%T" .PageContent) "main.PageData" }}
+                Module: {{ .PageContent.Module.Name }}
+            {{ end }}
+        </span>
     </header>
 
     <main id="main-content">
-        {{ block "page" . }}
-            <!-- Default content if no block is provided -->
-            <p>This is the default content area.</p>
+        {{ block "page" .PageContent }}
+            {{ if . }}
+                {{ if eq (printf "%T" .) "[]*model.Module" }}
+                    <h2>Available Modules</h2>
+                    <ul>
+                        {{ range . }}
+                            <li>
+                                {{ .Name }} (ID: {{ .ID }}) - Status: {{ .Status }}
+                                <br>
+                                <a href="/view/module/{{ .ID }}">View Page</a> |
+                                <button hx-get="/view/module/{{ .ID }}" hx-target="#main-content" hx-push-url="true">Load Module (HTMX)</button>
+                            </li>
+                        {{ else }}
+                            <p>No active modules found.</p>
+                        {{ end }}
+                    </ul>
+                {{ end }}
+            {{ else }}
+                 <p>Welcome! Use the navigation to view modules.</p>
+            {{ end }}
         {{ end }}
     </main>
 
     <footer>
         <p>&copy; 2025 My Site</p>
     </footer>
-
-    <!-- Link to main JS file if needed -->
 </body>
 </html>

@@ -2,16 +2,24 @@ package main
 
 import (
 	"bytes" // Added for rendering sub-templates
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"html/template"
 	"log"
+	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort" // Added for sorting
 	"strings"
 	"sync" // Added for map concurrency
+	"time"
 
 	"go-module-builder/internal/model"
 	"go-module-builder/internal/storage"
@@ -29,16 +37,120 @@ var moduleTemplatesMutex sync.RWMutex // Mutex for safe concurrent access
 
 var projectRoot string
 
+// Global variable to store the state of the module list toggle
+var isModuleListEnabled bool
+
+// Constants for certificate files
+const (
+	certFile = "cert.pem"
+	keyFile  = "key.pem"
+)
+
 // PageData holds the data passed to the main layout and page templates
+// for a specific module page
 type PageData struct {
 	Module          *model.Module
 	RenderedContent template.HTML // Pre-rendered HTML of sorted sub-templates
 }
 
+// LayoutData holds the data passed to the main layout template
+type LayoutData struct {
+	IsModuleListEnabled bool
+	PageContent         any // Can be nil, []*model.Module, or PageData
+}
+
+// generateSelfSignedCert creates a self-signed certificate and key file.
+func generateSelfSignedCert(certPath, keyPath string) error {
+	log.Printf("Generating self-signed certificate and key: %s, %s", certPath, keyPath)
+
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return fmt.Errorf("failed to generate private key: %w", err)
+	}
+
+	notBefore := time.Now()
+	// Set validity to 10 years for simplicity, adjust as needed
+	notAfter := notBefore.Add(10 * 365 * 24 * time.Hour)
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return fmt.Errorf("failed to generate serial number: %w", err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Self-Signed Org"},
+		},
+		NotBefore: notBefore,
+		NotAfter:  notAfter,
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+
+		// Use localhost and 127.0.0.1 as default DNS names/IPs
+		DNSNames:    []string{"localhost"},
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		return fmt.Errorf("failed to create certificate: %w", err)
+	}
+
+	// Create certificate file
+	certOut, err := os.Create(certPath)
+	if err != nil {
+		return fmt.Errorf("failed to open %s for writing: %w", certPath, err)
+	}
+	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+		certOut.Close() // Ensure file is closed even on error
+		return fmt.Errorf("failed to write data to %s: %w", certPath, err)
+	}
+	if err := certOut.Close(); err != nil {
+		return fmt.Errorf("failed to close %s: %w", certPath, err)
+	}
+	log.Printf("Successfully generated %s", certPath)
+
+	// Create key file
+	keyOut, err := os.OpenFile(keyPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) // Restrictive permissions
+	if err != nil {
+		return fmt.Errorf("failed to open %s for writing: %w", keyPath, err)
+	}
+	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		keyOut.Close()
+		return fmt.Errorf("unable to marshal private key: %w", err)
+	}
+	if err := pem.Encode(keyOut, &pem.Block{Type: "PRIVATE KEY", Bytes: privBytes}); err != nil {
+		keyOut.Close()
+		return fmt.Errorf("failed to write data to %s: %w", keyPath, err)
+	}
+	if err := keyOut.Close(); err != nil {
+		return fmt.Errorf("failed to close %s: %w", keyPath, err)
+	}
+	log.Printf("Successfully generated %s", keyPath)
+
+	return nil
+}
+
 func main() {
 	// 1. Define and parse command-line flags
-	port := flag.String("port", "8080", "Port to listen on")
+	port := flag.String("port", "8443", "Port to listen on for HTTPS") // Default to 8443 for HTTPS
+	toggleModuleList := flag.Bool("toggle-module-list", false, "Toggle the /modules/list page (default: disabled)")
 	flag.Parse()
+
+	// Store the flag state globally
+	isModuleListEnabled = *toggleModuleList
+
+	// Log module list page status
+	if isModuleListEnabled {
+		log.Println("Module list page enabled at /modules/list")
+	} else {
+		log.Println("Module list page is disabled. Use -toggle-module-list to enable it.")
+	}
 
 	// Get working directory and store globally
 	var err error
@@ -195,17 +307,48 @@ func main() {
 
 	// 4. Define page handlers
 	mux.HandleFunc("/", handleRootRequest)
-	// IMPORTANT: Change /module/ handler registration to be more specific
-	// to avoid conflict with /modules/ static handler.
-	// We'll use a different prefix, e.g., /view/module/
 	mux.HandleFunc("/view/module/", handleModulePageRequest) // Renamed handler and changed path
 
-	// 5. Start the HTTP server
+	// Conditionally register the module list handler
+	if isModuleListEnabled {
+		mux.HandleFunc("/modules/list", handleModuleListRequest)
+	}
+
+	// 5. Check for certs, generate if needed, and start HTTPS server
+	certPath := filepath.Join(projectRoot, certFile)
+	keyPath := filepath.Join(projectRoot, keyFile)
+
+	// Check if both files exist
+	_, certErr := os.Stat(certPath)
+	_, keyErr := os.Stat(keyPath)
+
+	if os.IsNotExist(certErr) || os.IsNotExist(keyErr) {
+		log.Println("Certificate or key file not found.")
+		err = generateSelfSignedCert(certPath, keyPath)
+		if err != nil {
+			log.Fatalf("Failed to generate self-signed certificate/key: %v", err)
+		}
+	} else if certErr != nil || keyErr != nil {
+		// Handle other errors during stat (e.g., permission issues)
+		log.Fatalf("Error checking certificate/key files: certErr=%v, keyErr=%v", certErr, keyErr)
+	} else {
+		log.Printf("Using existing certificate and key files: %s, %s", certPath, keyPath)
+	}
+
+	// Log warning about self-signed certs
+	log.Println("--------------------------------------------------------------------")
+	log.Println("WARNING: Starting server with a self-signed certificate.")
+	log.Println("Your browser will likely show security warnings (e.g., NET::ERR_CERT_AUTHORITY_INVALID).")
+	log.Println("This is expected. You may need to click 'Advanced' and 'Proceed' to access the site.")
+	log.Println("For production use, configure a proper reverse proxy (like Caddy) with valid certificates.")
+	log.Println("--------------------------------------------------------------------")
+
+	// Start the HTTPS server
 	addr := ":" + *port
-	fmt.Printf("Starting server on http://localhost%s\n", addr)
+	fmt.Printf("Starting HTTPS server on https://localhost%s\n", addr) // Update protocol in message
 	log.Printf("Listening on port %s...", *port)
 
-	err = http.ListenAndServe(addr, mux)
+	err = http.ListenAndServeTLS(addr, certPath, keyPath, mux) // Use ListenAndServeTLS
 	if err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
@@ -226,6 +369,11 @@ func handleRootRequest(w http.ResponseWriter, r *http.Request) {
 	isHTMX := r.Header.Get("HX-Request") == "true"
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
+	layoutData := LayoutData{
+		IsModuleListEnabled: isModuleListEnabled,
+		PageContent:         nil, // No specific content for root page
+	}
+
 	if isHTMX {
 		log.Println("HTMX request detected for root. Rendering fragment and clearing module header.")
 		// Clear the module header using OOB swap
@@ -235,8 +383,7 @@ func handleRootRequest(w http.ResponseWriter, r *http.Request) {
 			// Don't necessarily stop, try rendering main content anyway
 		}
 		// Render only the default page content block (or a specific home fragment if defined)
-		// For now, let's render an empty block or a default message
-		err = baseTemplates.ExecuteTemplate(w, "page", nil) // Assuming 'page' block exists in layout.html
+		err = baseTemplates.ExecuteTemplate(w, "page", layoutData) // Pass LayoutData
 		if err != nil {
 			log.Printf("Error executing page template for root (HTMX): %v", err)
 			// Avoid writing generic error if header already sent
@@ -247,11 +394,40 @@ func handleRootRequest(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Execute the full layout template directly from the base set for standard requests
 		log.Println("Standard request for root. Rendering full layout.html")
-		err := baseTemplates.ExecuteTemplate(w, "layout.html", nil) // Use baseTemplates
+		err := baseTemplates.ExecuteTemplate(w, "layout.html", layoutData) // Pass LayoutData
 		if err != nil {
 			log.Printf("Error executing layout template for root: %v", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
+	}
+}
+
+// handleModuleListRequest serves the list of modules
+func handleModuleListRequest(w http.ResponseWriter, r *http.Request) {
+	if baseTemplates == nil {
+		http.Error(w, "Internal Server Error - Base templates not loaded", http.StatusInternalServerError)
+		return
+	}
+
+	// Filter only active modules for listing
+	activeModules := make([]*model.Module, 0)
+	for _, mod := range loadedModules {
+		if mod.Status == "active" {
+			activeModules = append(activeModules, mod)
+		}
+	}
+
+	layoutData := LayoutData{
+		IsModuleListEnabled: isModuleListEnabled,
+		PageContent:         activeModules, // Pass active modules as PageContent
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	log.Println("Rendering module list page (/modules/list)")
+	err := baseTemplates.ExecuteTemplate(w, "layout.html", layoutData) // Pass LayoutData
+	if err != nil {
+		log.Printf("Error executing layout template for module list: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
@@ -335,6 +511,11 @@ func handleModulePageRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Prepared %d sorted templates, rendered into combined content for module %s page", len(renderableTemplates), moduleID)
 
+	layoutData := LayoutData{
+		IsModuleListEnabled: isModuleListEnabled,
+		PageContent:         pageData, // Pass the module-specific PageData
+	}
+
 	// 6. Determine if it's an HTMX request
 	isHTMX := r.Header.Get("HX-Request") == "true"
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -350,8 +531,8 @@ func handleModulePageRequest(w http.ResponseWriter, r *http.Request) {
 			return // Stop processing if header write fails
 		}
 
-		// Render the main content ('page' block) using the prepared pageData
-		err = moduleSpecificTemplates.ExecuteTemplate(w, "page", pageData) // Pass pageData
+		// Render the main content ('page' block) passing PageContent as context
+		err = moduleSpecificTemplates.ExecuteTemplate(w, "page", layoutData.PageContent)
 		if err != nil {
 			log.Printf("Error executing 'page' template for module %s (HTMX): %v", moduleID, err)
 			return
@@ -361,9 +542,9 @@ func handleModulePageRequest(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Standard request: Render the full layout
 		log.Printf("Standard request for module %s. Rendering full layout: layout.html", moduleID)
-		err := moduleSpecificTemplates.ExecuteTemplate(w, "layout.html", pageData) // Pass pageData
+		err := moduleSpecificTemplates.ExecuteTemplate(w, "layout.html", layoutData) // Pass LayoutData
 		if err != nil {
-			log.Printf("Error executing 'layout.html' template for module %s: %v", err)
+			log.Printf("Error executing 'layout.html' template for module %s: %v", moduleID, err)
 			if strings.Contains(err.Error(), "template\" is undefined") {
 				http.Error(w, "Internal Server Error - Module template missing", http.StatusInternalServerError)
 			} else {

@@ -28,6 +28,7 @@ server.exe
 # Personal Notes / Logs
 chat*.md
 PLAN.md
+PLAN_REVISED.md
 
 # Module data and generated files
 .module_metadata/
@@ -36,3 +37,9 @@ modules_removed/
 
 # Temporary files
 Last task.md
+
+# Testing Plan
+TESTING_PLAN.md
+*.pem
+AI Coding Agent Prompt.md
+ENDGOAL.md
