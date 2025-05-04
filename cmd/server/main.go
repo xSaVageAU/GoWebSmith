@@ -178,9 +178,9 @@ func main() {
 	}
 
 	// --- Create Router ---
-	mux := app.createServerMux() // createServerMux method is defined in routes.go
-	if mux == nil {
-		log.Fatalf("Failed to create server mux.")
+	router := app.routes() // routes method is defined in routes.go
+	if router == nil {     // Check if the returned handler is nil
+		log.Fatalf("Failed to create router.")
 	}
 
 	// --- Certificate Handling ---
@@ -214,7 +214,7 @@ func main() {
 	fmt.Printf("Starting HTTPS server on https://localhost%s\n", addr)
 	log.Printf("Listening on port %s...", *port)
 
-	err = http.ListenAndServeTLS(addr, certPath, keyPath, mux)
+	err = http.ListenAndServeTLS(addr, certPath, keyPath, router) // Pass the router
 	if err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}

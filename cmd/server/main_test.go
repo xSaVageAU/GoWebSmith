@@ -48,10 +48,10 @@ func TestStaticFileHandler(t *testing.T) {
 	// --- Setup ---
 	app := newTestApplication(t) // Use helper to create app instance
 
-	// Get the mux (router) by calling the method on the app instance
-	mux := app.createServerMux()
-	if mux == nil {
-		t.Fatal("app.createServerMux returned nil")
+	// Get the router by calling the method on the app instance
+	router := app.routes() // Use the new method name
+	if router == nil {
+		t.Fatal("app.routes returned nil")
 	}
 
 	// --- Create Request & Recorder ---
@@ -59,7 +59,7 @@ func TestStaticFileHandler(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	// --- Execute Request ---
-	mux.ServeHTTP(rr, req)
+	router.ServeHTTP(rr, req) // Serve using the router
 
 	// --- Assertions ---
 	// 1. Check Status Code
@@ -98,16 +98,16 @@ func TestHandleRootRequest(t *testing.T) {
 	// Base templates are parsed in newTestApplication helper
 
 	// Get the router using the method
-	mux := app.createServerMux()
-	if mux == nil {
-		t.Fatal("app.createServerMux returned nil")
+	router := app.routes() // Use the new method name
+	if router == nil {
+		t.Fatal("app.routes returned nil")
 	}
 
 	// --- Test Standard Request ---
 	req := httptest.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 
-	mux.ServeHTTP(rr, req)
+	router.ServeHTTP(rr, req) // Serve using the router
 
 	// Verify response code
 	if status := rr.Code; status != http.StatusOK {
@@ -132,7 +132,7 @@ func TestHandleRootRequest(t *testing.T) {
 	reqHtmx.Header.Add("HX-Request", "true") // Set HTMX header
 	rrHtmx := httptest.NewRecorder()
 
-	mux.ServeHTTP(rrHtmx, reqHtmx)
+	router.ServeHTTP(rrHtmx, reqHtmx) // Serve using the router
 
 	// Verify response code
 	if status := rrHtmx.Code; status != http.StatusOK {
@@ -195,16 +195,16 @@ func TestHandleModulePageRequest(t *testing.T) {
 	app.moduleTemplates[testModule.ID] = clonedTemplates
 
 	// Get the router
-	mux := app.createServerMux()
-	if mux == nil {
-		t.Fatal("app.createServerMux returned nil")
+	router := app.routes() // Use the new method name
+	if router == nil {
+		t.Fatal("app.routes returned nil")
 	}
 
 	// --- Test Valid Module Request ---
-	req := httptest.NewRequest("GET", "/view/module/test-module-123", nil)
+	req := httptest.NewRequest("GET", "/test-module-123", nil) // Use root-level path
 	rr := httptest.NewRecorder()
 
-	mux.ServeHTTP(rr, req)
+	router.ServeHTTP(rr, req) // Serve using the router
 
 	// Verify response code
 	if status := rr.Code; status != http.StatusOK {
@@ -225,11 +225,11 @@ func TestHandleModulePageRequest(t *testing.T) {
 	}
 
 	// --- Test HTMX Module Request ---
-	reqHtmx := httptest.NewRequest("GET", "/view/module/test-module-123", nil)
-	reqHtmx.Header.Add("HX-Request", "true") // Set HTMX header
+	reqHtmx := httptest.NewRequest("GET", "/test-module-123", nil) // Use root-level path
+	reqHtmx.Header.Add("HX-Request", "true")                       // Set HTMX header
 	rrHtmx := httptest.NewRecorder()
 
-	mux.ServeHTTP(rrHtmx, reqHtmx)
+	router.ServeHTTP(rrHtmx, reqHtmx) // Serve using the router
 
 	// Verify HTMX header swap is present
 	htmxBodyStr := rrHtmx.Body.String()
@@ -243,10 +243,10 @@ func TestHandleModulePageRequest(t *testing.T) {
 	}
 
 	// --- Test Invalid Module ID ---
-	reqInvalid := httptest.NewRequest("GET", "/view/module/non-existent", nil)
+	reqInvalid := httptest.NewRequest("GET", "/non-existent", nil) // Use root-level path
 	rrInvalid := httptest.NewRecorder()
 
-	mux.ServeHTTP(rrInvalid, reqInvalid)
+	router.ServeHTTP(rrInvalid, reqInvalid) // Serve using the router
 
 	// Verify 404 for non-existent module
 	if status := rrInvalid.Code; status != http.StatusNotFound {
@@ -284,16 +284,16 @@ func TestHandleModuleStaticRequest(t *testing.T) {
 	})
 
 	// Get the router
-	mux := app.createServerMux()
-	if mux == nil {
-		t.Fatal("app.createServerMux returned nil")
+	router := app.routes() // Use the new method name
+	if router == nil {
+		t.Fatal("app.routes returned nil")
 	}
 
 	// --- Test Valid Static File Request ---
 	req := httptest.NewRequest("GET", "/modules/"+moduleID+"/static/test.css", nil)
 	rr := httptest.NewRecorder()
 
-	mux.ServeHTTP(rr, req)
+	router.ServeHTTP(rr, req) // Serve using the router
 
 	// Verify response code
 	if status := rr.Code; status != http.StatusOK {
@@ -318,7 +318,7 @@ func TestHandleModuleStaticRequest(t *testing.T) {
 	reqInvalid := httptest.NewRequest("GET", "/modules/"+moduleID+"/static/non-existent.css", nil)
 	rrInvalid := httptest.NewRecorder()
 
-	mux.ServeHTTP(rrInvalid, reqInvalid)
+	router.ServeHTTP(rrInvalid, reqInvalid) // Serve using the router
 
 	// Verify 404 for non-existent file
 	if status := rrInvalid.Code; status != http.StatusNotFound {
@@ -349,16 +349,16 @@ func TestHandleModuleListRequest(t *testing.T) {
 	app.loadedModules = []*model.Module{activeModule, removedModule}
 
 	// Get the router
-	mux := app.createServerMux()
-	if mux == nil {
-		t.Fatal("app.createServerMux returned nil")
+	router := app.routes() // Use the new method name
+	if router == nil {
+		t.Fatal("app.routes returned nil")
 	}
 
 	// --- Test Module List Request ---
 	req := httptest.NewRequest("GET", "/modules/list", nil)
 	rr := httptest.NewRecorder()
 
-	mux.ServeHTTP(rr, req)
+	router.ServeHTTP(rr, req) // Serve using the router
 
 	// Verify response code
 	if status := rr.Code; status != http.StatusOK {

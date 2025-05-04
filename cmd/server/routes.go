@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/go-chi/chi/v5" // Import chi
 )
 
 // --- Struct Definitions ---
@@ -45,41 +47,46 @@ type LayoutData struct {
 
 // --- Router Setup ---
 
-// createServerMux sets up the HTTP router using application methods.
-func (app *application) createServerMux() *http.ServeMux {
-	mux := http.NewServeMux()
+// routes sets up the HTTP router using chi and application methods.
+func (app *application) routes() http.Handler { // Changed return type
+	r := chi.NewRouter() // Use chi router
 
-	// Static file server for general assets
+	// --- Middleware (Optional but recommended) ---
+	// r.Use(middleware.Logger) // Example: chi's built-in logger
+	// r.Use(middleware.Recoverer) // Example: chi's built-in panic recoverer
+
+	// --- Static file servers ---
+	// General static assets
 	staticDir := filepath.Join(app.projectRoot, "web", "static")
-	log.Printf("Mux Setup: Serving static files from: %s", staticDir)
-	fs := http.FileServer(http.Dir(staticDir))
-	mux.Handle("/static/", http.StripPrefix("/static/", fs))
+	log.Printf("Router Setup: Serving static files from: %s", staticDir)
+	fileServer := http.FileServer(http.Dir(staticDir))
+	r.Mount("/static", http.StripPrefix("/static/", fileServer)) // Use Mount
 
-	// Static file server for module-specific assets
-	modulesDir := filepath.Join(app.projectRoot, "modules")
-	log.Printf("Mux Setup: Serving module static files relative to: %s", modulesDir)
-	mux.HandleFunc("/modules/", app.handleModuleStaticRequest) // Use method
+	// Module-specific static assets
+	log.Printf("Router Setup: Serving module static files via /modules/{moduleID}/static/*")
+	r.Get("/modules/{moduleID}/static/*", app.handleModuleStaticRequest) // Use chi pattern
 
-	// Page handlers
-	mux.HandleFunc("/", app.handleRootRequest)                   // Use method
-	mux.HandleFunc("/view/module/", app.handleModulePageRequest) // Use method
+	// --- Page Handlers ---
+	r.Get("/", app.handleRootRequest) // Use r.Get
 
 	// Conditionally register the module list handler
 	if app.isModuleListEnabled {
-		mux.HandleFunc("/modules/list", app.handleModuleListRequest) // Use method
+		log.Printf("Router Setup: Enabling /modules/list route")
+		r.Get("/modules/list", app.handleModuleListRequest) // Use r.Get
 	}
 
-	return mux
+	// Root-level module page handler (MUST be last to avoid overriding other routes)
+	log.Printf("Router Setup: Enabling /{moduleID} route for module pages")
+	r.Get("/{moduleID}", app.handleModulePageRequest) // Use chi pattern at root
+
+	return r // Return the chi router (which implements http.Handler)
 }
 
 // --- HTTP Handlers (Methods on *application) ---
 
 // handleRootRequest serves the main layout for the root path
 func (app *application) handleRootRequest(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
+	// No need for path check with chi, it handles exact match
 
 	if app.baseTemplates == nil {
 		http.Error(w, "Internal Server Error - Base templates not loaded", http.StatusInternalServerError)
@@ -90,8 +97,8 @@ func (app *application) handleRootRequest(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	layoutData := LayoutData{
-		IsModuleListEnabled: app.isModuleListEnabled, // Use app field
-		PageContent:         nil,                     // No specific content for root page
+		IsModuleListEnabled: app.isModuleListEnabled,
+		PageContent:         nil,
 	}
 
 	if isHTMX {
@@ -101,7 +108,7 @@ func (app *application) handleRootRequest(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			log.Printf("Error writing OOB header clear for root: %v", err)
 		}
-		err = app.baseTemplates.ExecuteTemplate(w, "page", layoutData) // Use app field
+		err = app.baseTemplates.ExecuteTemplate(w, "page", layoutData)
 		if err != nil {
 			log.Printf("Error executing page template for root (HTMX): %v", err)
 			if !strings.Contains(err.Error(), "multiple response.WriteHeader calls") {
@@ -110,7 +117,7 @@ func (app *application) handleRootRequest(w http.ResponseWriter, r *http.Request
 		}
 	} else {
 		log.Println("Standard request for root. Rendering full layout.html")
-		err := app.baseTemplates.ExecuteTemplate(w, "layout.html", layoutData) // Use app field
+		err := app.baseTemplates.ExecuteTemplate(w, "layout.html", layoutData)
 		if err != nil {
 			log.Printf("Error executing layout template for root: %v", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -125,41 +132,41 @@ func (app *application) handleModuleListRequest(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Filter only active modules for listing
 	activeModules := make([]*model.Module, 0)
-	for _, mod := range app.loadedModules { // Use app field
+	for _, mod := range app.loadedModules {
 		if mod.IsActive {
 			activeModules = append(activeModules, mod)
 		}
 	}
 
 	layoutData := LayoutData{
-		IsModuleListEnabled: app.isModuleListEnabled, // Use app field
-		PageContent:         activeModules,           // Pass active modules as PageContent
+		IsModuleListEnabled: app.isModuleListEnabled,
+		PageContent:         activeModules,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	log.Println("Rendering module list page (/modules/list)")
-	err := app.baseTemplates.ExecuteTemplate(w, "layout.html", layoutData) // Use app field
+	err := app.baseTemplates.ExecuteTemplate(w, "layout.html", layoutData)
 	if err != nil {
 		log.Printf("Error executing layout template for module list: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
-// handleModulePageRequest serves a specific module's main page
+// handleModulePageRequest serves a specific module's main page using chi URL params
 func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.Request) {
-	// 1. Extract Module ID
-	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(pathParts) != 3 || pathParts[0] != "view" || pathParts[1] != "module" {
+	// 1. Extract Module ID using chi
+	moduleID := chi.URLParam(r, "moduleID")
+	if moduleID == "" {
+		// This case might occur if the route was somehow matched without the param
+		log.Println("Error: Module ID missing in URL parameter for handleModulePageRequest")
 		http.NotFound(w, r)
 		return
 	}
-	moduleID := pathParts[2]
 
 	// 2. Find the module by ID
 	var targetModule *model.Module
-	for _, mod := range app.loadedModules { // Use app field
+	for _, mod := range app.loadedModules {
 		if mod.ID == moduleID {
 			targetModule = mod
 			break
@@ -168,8 +175,9 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 
 	// 3. Handle not found or inactive module
 	if targetModule == nil {
-		log.Printf("Module with ID %s not found", moduleID)
-		http.NotFound(w, r)
+		log.Printf("Module with ID %s not found via URL param", moduleID)
+		http.NotFound(w, r) // Let this fall through - maybe another route matches? Or handle 404 here.
+		// For now, let's assume if the param is present but module not found, it's a 404 for this handler.
 		return
 	}
 	if !targetModule.IsActive {
@@ -179,9 +187,9 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	}
 
 	// 4. Get the specific template set for this module
-	app.moduleTemplatesMutex.RLock()                             // Use app field
-	moduleSpecificTemplates, ok := app.moduleTemplates[moduleID] // Use app field
-	app.moduleTemplatesMutex.RUnlock()                           // Use app field
+	app.moduleTemplatesMutex.RLock()
+	moduleSpecificTemplates, ok := app.moduleTemplates[moduleID]
+	app.moduleTemplatesMutex.RUnlock()
 
 	if !ok {
 		log.Printf("Template set not found for module %s. Was it parsed correctly?", moduleID)
@@ -217,7 +225,7 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	log.Printf("Prepared %d sorted templates, rendered into combined content for module %s page", len(renderableTemplates), moduleID)
 
 	layoutData := LayoutData{
-		IsModuleListEnabled: app.isModuleListEnabled, // Use app field
+		IsModuleListEnabled: app.isModuleListEnabled,
 		PageContent:         pageData,
 	}
 
@@ -253,26 +261,39 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	}
 }
 
-// handleModuleStaticRequest serves static files from a module's directory
+// handleModuleStaticRequest serves static files from a module's directory using chi URL params
 func (app *application) handleModuleStaticRequest(w http.ResponseWriter, r *http.Request) {
-	// Expected path: /modules/{module_id}/static/{file_path}
-	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	moduleID := chi.URLParam(r, "moduleID")
+	// Get the requested file path from the wildcard parameter
+	filePathParam := chi.URLParam(r, "*")
 
-	if len(pathParts) < 4 || pathParts[0] != "modules" || pathParts[2] != "static" {
+	if moduleID == "" || filePathParam == "" {
+		log.Printf("Error: Missing moduleID (%q) or filePath (%q) in module static request", moduleID, filePathParam)
 		http.NotFound(w, r)
 		return
 	}
 
-	moduleID := pathParts[1]
-	relativeFilePath := filepath.Join(pathParts[3:]...)
+	// Clean the path to prevent directory traversal issues.
+	// Join turns cleaned path segments into a valid path for the OS.
+	relativeFilePath := filepath.Join(strings.Split(filePathParam, "/")...)
+	if relativeFilePath == "" || strings.Contains(relativeFilePath, "..") {
+		log.Printf("Error: Invalid file path requested: %q (cleaned: %q)", filePathParam, relativeFilePath)
+		http.Error(w, "Invalid file path", http.StatusBadRequest)
+		return
+	}
 
 	// Construct the actual file path on disk
-	filePath := filepath.Join(app.projectRoot, "modules", moduleID, "templates", relativeFilePath) // Use app field
+	// NOTE: Assumes static assets are within the module's 'templates' subdirectory
+	filePath := filepath.Join(app.projectRoot, "modules", moduleID, "templates", relativeFilePath)
 
 	// Check if file exists and serve it
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		log.Printf("Static file not found for module %s: %s (requested path: %s)", moduleID, filePath, r.URL.Path)
 		http.NotFound(w, r)
+		return
+	} else if err != nil {
+		log.Printf("Error stating static file for module %s: %s. Error: %v", moduleID, filePath, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
