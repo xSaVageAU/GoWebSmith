@@ -77,7 +77,12 @@ func main() {
 
 	// --- New: Flags for update command ---
 	updateID := updateCmd.String("id", "", "ID of the module to update (required)")
-	updateName := updateCmd.String("name", "", "New name for the module (required)")
+	updateName := updateCmd.String("name", "", "New name for the module (optional)") // Make optional
+	updateSlug := updateCmd.String("slug", "", "New URL slug for the module (optional)")
+	updateGroup := updateCmd.String("group", "", "New group for the module (optional)")
+	updateLayout := updateCmd.String("layout", "", "New layout file override (optional)")
+	updateDesc := updateCmd.String("desc", "", "New description for the module (optional)")
+	// Note: IsActive and Assets might need different handling (e.g., separate commands or flags)
 
 	if len(os.Args) < 2 {
 		printUsage()
@@ -129,12 +134,20 @@ func main() {
 	// --- New: Handle update command ---
 	case "update":
 		updateCmd.Parse(os.Args[2:])
-		if *updateID == "" || *updateName == "" {
-			fmt.Println("Error: -id and -name flags are required for update command")
+		// Only ID is strictly required now
+		if *updateID == "" {
+			fmt.Println("Error: -id flag is required for update command")
 			updateCmd.Usage()
 			return
 		}
-		handleUpdateModule(store, *updateID, *updateName)
+		// Check if at least one update flag was provided
+		if *updateName == "" && *updateSlug == "" && *updateGroup == "" && *updateLayout == "" && *updateDesc == "" {
+			fmt.Println("Error: At least one update flag (-name, -slug, -group, -layout, -desc) must be provided")
+			updateCmd.Usage()
+			return
+		}
+		// Pass all flags to the handler
+		handleUpdateModule(store, *updateID, *updateName, *updateSlug, *updateGroup, *updateLayout, *updateDesc)
 
 	default:
 		fmt.Printf("Unknown command: %s\n", os.Args[1])
@@ -148,10 +161,10 @@ func printUsage() {
 	fmt.Println("\nUsage: builder-cli <command> [options]")
 	fmt.Println("Available commands:")
 	fmt.Println("  list          List all known modules")
-	fmt.Println("  create -name <module-name>")
-	fmt.Println("                Create a new module")
-	fmt.Println("  update -id <module-id> -name <new-name>") // Added update command
-	fmt.Println("                Update a module's metadata (e.g., rename)")
+	fmt.Println("  create -name <module-name> [-slug <custom-slug>]")
+	fmt.Println("                Create a new module (slug defaults to UUID if not provided)")
+	fmt.Println("  update -id <module-id> [-name <new-name>] [-slug <new-slug>] [-group <group>] [-layout <layout>] [-desc <desc>]")
+	fmt.Println("                Update module metadata (provide at least one optional flag)")
 	fmt.Println("  delete -id <module-id,...> [--force] | --nuke-all")
 	fmt.Println("                Delete modules by ID, or use --nuke-all to delete everything")
 	fmt.Println("  preview -id <module-id>")
@@ -642,7 +655,7 @@ func handlePurgeRemovedModules(store storage.DataStore) {
 }
 
 // --- New: Handler function for update command ---
-func handleUpdateModule(store storage.DataStore, moduleID, newName string) {
+func handleUpdateModule(store storage.DataStore, moduleID, newName, newSlug, newGroup, newLayout, newDesc string) { // Add new params
 	fmt.Printf("\nUpdating module ID: %s\n", moduleID)
 
 	// 1. Load the module metadata
@@ -651,15 +664,46 @@ func handleUpdateModule(store storage.DataStore, moduleID, newName string) {
 		log.Fatalf("Error loading module metadata for ID %s: %v", moduleID, err)
 	}
 
-	// 2. Update fields
-	oldName := module.Name
-	module.Name = newName
+	// 2. Update fields based on provided flags
+	updated := false
+	if newName != "" {
+		fmt.Printf("  Updating Name: %s -> %s\n", module.Name, newName)
+		module.Name = newName
+		updated = true
+	}
+	if newSlug != "" {
+		// Consider adding validation/sanitization for user-provided slugs here
+		fmt.Printf("  Updating Slug: %s -> %s\n", module.Slug, newSlug)
+		module.Slug = newSlug // Directly use provided slug for now
+		updated = true
+	}
+	if newGroup != "" {
+		fmt.Printf("  Updating Group: %s -> %s\n", module.Group, newGroup)
+		module.Group = newGroup
+		updated = true
+	}
+	if newLayout != "" {
+		fmt.Printf("  Updating Layout: %s -> %s\n", module.Layout, newLayout)
+		module.Layout = newLayout
+		updated = true
+	}
+	if newDesc != "" {
+		fmt.Printf("  Updating Description: %s -> %s\n", module.Description, newDesc)
+		module.Description = newDesc
+		updated = true
+	}
+
+	if !updated {
+		fmt.Println("No update flags provided, nothing to change.")
+		return // Exit if no changes were actually requested
+	}
+
 	module.LastUpdated = time.Now()
 
-	// 3. Save updated module metadata
+	// 3. Save updated module metadata (Ensure this runs if updated is true)
 	if err := store.SaveModule(module); err != nil {
 		log.Fatalf("Error saving updated module metadata for ID %s: %v", moduleID, err)
 	}
 
-	fmt.Printf("Successfully updated module %s. Renamed from '%s' to '%s'.\n", moduleID, oldName, newName)
+	fmt.Printf("Successfully updated module metadata for ID %s.\n", moduleID)
 }
