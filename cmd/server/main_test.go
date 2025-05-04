@@ -160,6 +160,7 @@ func TestHandleModulePageRequest(t *testing.T) {
 	testModule := &model.Module{
 		ID:          "test-module-123",
 		Name:        "Test Module",
+		Slug:        "test-module-slug", // Add slug for testing
 		IsActive:    true,
 		CreatedAt:   time.Now(),
 		LastUpdated: time.Now(),
@@ -201,7 +202,7 @@ func TestHandleModulePageRequest(t *testing.T) {
 	}
 
 	// --- Test Valid Module Request ---
-	req := httptest.NewRequest("GET", "/test-module-123", nil) // Use root-level path
+	req := httptest.NewRequest("GET", "/test-module-slug", nil) // Use slug in path
 	rr := httptest.NewRecorder()
 
 	router.ServeHTTP(rr, req) // Serve using the router
@@ -225,8 +226,8 @@ func TestHandleModulePageRequest(t *testing.T) {
 	}
 
 	// --- Test HTMX Module Request ---
-	reqHtmx := httptest.NewRequest("GET", "/test-module-123", nil) // Use root-level path
-	reqHtmx.Header.Add("HX-Request", "true")                       // Set HTMX header
+	reqHtmx := httptest.NewRequest("GET", "/test-module-slug", nil) // Use slug in path
+	reqHtmx.Header.Add("HX-Request", "true")                        // Set HTMX header
 	rrHtmx := httptest.NewRecorder()
 
 	router.ServeHTTP(rrHtmx, reqHtmx) // Serve using the router
@@ -242,15 +243,15 @@ func TestHandleModulePageRequest(t *testing.T) {
 		t.Errorf("HTMX module response body does not contain expected rendered sub-template content. Got: %s", htmxBodyStr)
 	}
 
-	// --- Test Invalid Module ID ---
-	reqInvalid := httptest.NewRequest("GET", "/non-existent", nil) // Use root-level path
+	// --- Test Invalid Module Slug ---
+	reqInvalid := httptest.NewRequest("GET", "/non-existent-slug", nil) // Use different slug
 	rrInvalid := httptest.NewRecorder()
 
 	router.ServeHTTP(rrInvalid, reqInvalid) // Serve using the router
 
-	// Verify 404 for non-existent module
+	// Verify 404 for non-existent slug
 	if status := rrInvalid.Code; status != http.StatusNotFound {
-		t.Errorf("Invalid module request returned wrong status code: got %v want %v",
+		t.Errorf("Invalid module slug request returned wrong status code: got %v want %v",
 			status, http.StatusNotFound)
 	}
 }

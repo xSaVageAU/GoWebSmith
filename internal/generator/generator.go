@@ -24,8 +24,26 @@ type FileContent struct {
 	SubDir  string // Relative path from the module root (e.g., "templates", "")
 }
 
+// --- Slug Generation ---
+var nonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`) // For slugs, allow only lowercase alphanum and hyphen
+var multiHyphen = regexp.MustCompile(`-+`)             // To collapse multiple hyphens
+
+// generateSlug creates a URL-friendly slug from a name.
+func generateSlug(name string) string {
+	slug := strings.ToLower(name)
+	slug = nonAlphanumeric.ReplaceAllString(slug, "-") // Replace non-alphanum with hyphens
+	slug = multiHyphen.ReplaceAllString(slug, "-")     // Collapse multiple hyphens
+	slug = strings.Trim(slug, "-")                     // Trim leading/trailing hyphens
+	if slug == "" {
+		// Handle empty slug case, maybe use a default or part of UUID? For now, simple default.
+		return "module"
+	}
+	return slug
+}
+
+// --- Package Name Sanitization ---
 // Sanitize package name: replace non-alphanumeric with underscore, ensure starts with letter
-var nonAlphanumeric = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+var nonAlphanumericPkg = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 
 func sanitizePackageName(name string) string {
 	sanitized := nonAlphanumeric.ReplaceAllString(name, "_")
@@ -171,6 +189,7 @@ func GenerateModuleBoilerplate(cfg Config, moduleName, moduleID string) (*model.
 		Layout:      "",
 		Assets:      nil,
 		Description: "",
+		Slug:        generateSlug(moduleName), // Generate and set the slug
 		Templates:   make([]model.Template, 0, len(cfg.DefaultFiles)),
 	}
 

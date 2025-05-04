@@ -25,6 +25,7 @@ type Module struct {
 	CreatedAt   time.Time  `json:"createdAt"`
 	LastUpdated time.Time  `json:"lastUpdated"`
 	IsActive    bool       `json:"is_active"`             // Whether the module is enabled (true) or disabled (false)
+	Slug        string     `json:"slug,omitempty"`        // URL-friendly identifier (e.g., "my-module-name")
 	Group       string     `json:"group,omitempty"`       // Group this module belongs to
 	Layout      string     `json:"layout,omitempty"`      // Specific layout file override (relative path from web/templates?)
 	Assets      []string   `json:"assets,omitempty"`      // List of global asset identifiers associated

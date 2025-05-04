@@ -76,8 +76,8 @@ func (app *application) routes() http.Handler { // Changed return type
 	}
 
 	// Root-level module page handler (MUST be last to avoid overriding other routes)
-	log.Printf("Router Setup: Enabling /{moduleID} route for module pages")
-	r.Get("/{moduleID}", app.handleModulePageRequest) // Use chi pattern at root
+	log.Printf("Router Setup: Enabling /{moduleSlug} route for module pages")
+	r.Get("/{moduleSlug}", app.handleModulePageRequest) // Use slug in pattern
 
 	return r // Return the chi router (which implements http.Handler)
 }
@@ -153,21 +153,21 @@ func (app *application) handleModuleListRequest(w http.ResponseWriter, r *http.R
 	}
 }
 
-// handleModulePageRequest serves a specific module's main page using chi URL params
+// handleModulePageRequest serves a specific module's main page using chi URL params (slug)
 func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.Request) {
-	// 1. Extract Module ID using chi
-	moduleID := chi.URLParam(r, "moduleID")
-	if moduleID == "" {
+	// 1. Extract Module Slug using chi
+	moduleSlug := chi.URLParam(r, "moduleSlug") // Use moduleSlug param name
+	if moduleSlug == "" {
 		// This case might occur if the route was somehow matched without the param
-		log.Println("Error: Module ID missing in URL parameter for handleModulePageRequest")
+		log.Println("Error: Module slug missing in URL parameter for handleModulePageRequest")
 		http.NotFound(w, r)
 		return
 	}
 
-	// 2. Find the module by ID
+	// 2. Find the module by Slug
 	var targetModule *model.Module
 	for _, mod := range app.loadedModules {
-		if mod.ID == moduleID {
+		if mod.Slug == moduleSlug { // Match by Slug field
 			targetModule = mod
 			break
 		}
@@ -175,24 +175,23 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 
 	// 3. Handle not found or inactive module
 	if targetModule == nil {
-		log.Printf("Module with ID %s not found via URL param", moduleID)
-		http.NotFound(w, r) // Let this fall through - maybe another route matches? Or handle 404 here.
-		// For now, let's assume if the param is present but module not found, it's a 404 for this handler.
+		log.Printf("Module with slug %q not found via URL param", moduleSlug) // Log slug
+		http.NotFound(w, r)                                                   // Treat as 404 if slug doesn't match any loaded module
 		return
 	}
 	if !targetModule.IsActive {
-		log.Printf("Module %s (%s) is not active (IsActive: %v)", targetModule.Name, moduleID, targetModule.IsActive)
+		log.Printf("Module %s (Slug: %s) is not active (IsActive: %v)", targetModule.Name, moduleSlug, targetModule.IsActive)
 		http.Error(w, "Module not available", http.StatusForbidden)
 		return
 	}
 
-	// 4. Get the specific template set for this module
+	// 4. Get the specific template set for this module (using its ID, not slug)
 	app.moduleTemplatesMutex.RLock()
-	moduleSpecificTemplates, ok := app.moduleTemplates[moduleID]
+	moduleSpecificTemplates, ok := app.moduleTemplates[targetModule.ID] // Still use ID to lookup templates
 	app.moduleTemplatesMutex.RUnlock()
 
 	if !ok {
-		log.Printf("Template set not found for module %s. Was it parsed correctly?", moduleID)
+		log.Printf("Template set not found for module %s (ID: %s). Was it parsed correctly?", targetModule.Name, targetModule.ID)
 		http.Error(w, "Internal Server Error - Module templates not loaded", http.StatusInternalServerError)
 		return
 	}
@@ -211,10 +210,10 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	var renderedContentBuf bytes.Buffer
 	for _, tmplToRender := range renderableTemplates {
 		definedName := strings.TrimSuffix(tmplToRender.Name, filepath.Ext(tmplToRender.Name))
-		log.Printf("Rendering sub-template with defined name: %s (from file: %s) for module %s", definedName, tmplToRender.Name, moduleID)
+		log.Printf("Rendering sub-template with defined name: %s (from file: %s) for module %s (Slug: %s)", definedName, tmplToRender.Name, targetModule.Name, moduleSlug)
 		err := moduleSpecificTemplates.ExecuteTemplate(&renderedContentBuf, definedName, targetModule)
 		if err != nil {
-			log.Printf("ERROR rendering sub-template '%s' for module %s: %v", definedName, moduleID, err)
+			log.Printf("ERROR rendering sub-template '%s' for module %s (Slug: %s): %v", definedName, targetModule.Name, moduleSlug, err)
 		}
 	}
 
@@ -222,7 +221,7 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 		Module:          targetModule,
 		RenderedContent: template.HTML(renderedContentBuf.String()),
 	}
-	log.Printf("Prepared %d sorted templates, rendered into combined content for module %s page", len(renderableTemplates), moduleID)
+	log.Printf("Prepared %d sorted templates, rendered into combined content for module %s (Slug: %s) page", len(renderableTemplates), targetModule.Name, moduleSlug)
 
 	layoutData := LayoutData{
 		IsModuleListEnabled: app.isModuleListEnabled,
@@ -234,24 +233,24 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if isHTMX {
-		log.Printf("HTMX request detected for module %s. Rendering OOB header and page fragment.", moduleID)
+		log.Printf("HTMX request detected for module %s (Slug: %s). Rendering OOB header and page fragment.", targetModule.Name, moduleSlug)
 		headerSwapHTML := fmt.Sprintf(`<span id="module-header-info" hx-swap-oob="innerHTML">Module: %s</span>`, template.HTMLEscapeString(targetModule.Name))
 		_, err := w.Write([]byte(headerSwapHTML))
 		if err != nil {
-			log.Printf("Error writing OOB header swap for module %s: %v", moduleID, err)
+			log.Printf("Error writing OOB header swap for module %s (Slug: %s): %v", targetModule.Name, moduleSlug, err)
 			return
 		}
 		err = moduleSpecificTemplates.ExecuteTemplate(w, "page", layoutData.PageContent)
 		if err != nil {
-			log.Printf("Error executing 'page' template for module %s (HTMX): %v", moduleID, err)
+			log.Printf("Error executing 'page' template for module %s (Slug: %s) (HTMX): %v", targetModule.Name, moduleSlug, err)
 			return
 		}
-		log.Printf("Successfully rendered OOB header and page fragment for module %s.", moduleID)
+		log.Printf("Successfully rendered OOB header and page fragment for module %s (Slug: %s).", targetModule.Name, moduleSlug)
 	} else {
-		log.Printf("Standard request for module %s. Rendering full layout: layout.html", moduleID)
+		log.Printf("Standard request for module %s (Slug: %s). Rendering full layout: layout.html", targetModule.Name, moduleSlug)
 		err := moduleSpecificTemplates.ExecuteTemplate(w, "layout.html", layoutData)
 		if err != nil {
-			log.Printf("Error executing 'layout.html' template for module %s: %v", moduleID, err)
+			log.Printf("Error executing 'layout.html' template for module %s (Slug: %s): %v", targetModule.Name, moduleSlug, err)
 			if strings.Contains(err.Error(), "template\" is undefined") {
 				http.Error(w, "Internal Server Error - Module template missing", http.StatusInternalServerError)
 			} else {

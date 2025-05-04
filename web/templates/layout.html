@@ -37,8 +37,8 @@
                             <li>
                                 {{ .Name }} (ID: {{ .ID }}) - Status: {{ if .IsActive }}Active{{ else }}Inactive{{ end }}
                                 <br>
-                                <a href="/{{ .ID }}">View Page</a> |
-                                <button hx-get="/{{ .ID }}" hx-target="#main-content" hx-push-url="true">Load Module (HTMX)</button>
+                                <a href="/{{ .Slug }}">View Page</a> |
+                                <button hx-get="/{{ .Slug }}" hx-target="#main-content" hx-push-url="true">Load Module (HTMX)</button>
                             </li>
                         {{ else }}
                             <p>No active modules found.</p>
