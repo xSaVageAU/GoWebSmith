@@ -61,6 +61,7 @@ func main() {
 
 	// Flags for create command
 	createName := createCmd.String("name", "", "Name of the module to create (required)")
+	createSlug := createCmd.String("slug", "", "Optional custom URL slug (default: module UUID)") // NEW FLAG
 
 	// Flags for delete command
 	deleteID := deleteCmd.String("id", "", "ID(s) of the module(s) to delete (comma-separated)")
@@ -94,7 +95,7 @@ func main() {
 			createCmd.Usage()
 			return
 		}
-		handleCreateModule(store, moduleStorageDir, *createName)
+		handleCreateModule(store, moduleStorageDir, *createName, *createSlug) // Pass slug flag
 	case "delete":
 		deleteCmd.Parse(os.Args[2:])
 		// Check flags *after* parsing
@@ -197,8 +198,11 @@ func handleListModules(store storage.DataStore) {
 	}
 }
 
-func handleCreateModule(store storage.DataStore, moduleBaseDir, moduleName string) {
+func handleCreateModule(store storage.DataStore, moduleBaseDir, moduleName, customSlug string) { // Add customSlug param
 	fmt.Printf("\nCreating module: %s\n", moduleName)
+	if customSlug != "" {
+		fmt.Printf("Using custom slug: %s\n", customSlug)
+	}
 
 	// 1. Generate unique ID
 	moduleID := uuid.New().String()
@@ -207,8 +211,8 @@ func handleCreateModule(store storage.DataStore, moduleBaseDir, moduleName strin
 	// 2. Get generator config
 	genConfig := generator.DefaultGeneratorConfig(moduleBaseDir)
 
-	// 3. Generate boilerplate files/dirs
-	newModule, err := generator.GenerateModuleBoilerplate(genConfig, moduleName, moduleID)
+	// 3. Generate boilerplate files/dirs, passing the custom slug
+	newModule, err := generator.GenerateModuleBoilerplate(genConfig, moduleName, moduleID, customSlug)
 	if err != nil {
 		log.Fatalf("Error generating module boilerplate: %v", err)
 		// Consider more graceful error handling / cleanup here

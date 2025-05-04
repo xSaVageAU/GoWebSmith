@@ -46,7 +46,7 @@ func generateSlug(name string) string {
 var nonAlphanumericPkg = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 
 func sanitizePackageName(name string) string {
-	sanitized := nonAlphanumeric.ReplaceAllString(name, "_")
+	sanitized := nonAlphanumericPkg.ReplaceAllString(name, "_") // Use the correct regex for package names
 	sanitized = strings.ToLower(sanitized)
 	if len(sanitized) == 0 || (sanitized[0] >= '0' && sanitized[0] <= '9') {
 		sanitized = "module_" + sanitized
@@ -156,8 +156,9 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 // GenerateModuleBoilerplate creates the directory structure and default files for a new module.
+// It now accepts an optional customSlug. If empty, the moduleID (UUID) is used as the slug.
 // It returns the newly created Module object (with paths populated) or an error.
-func GenerateModuleBoilerplate(cfg Config, moduleName, moduleID string) (*model.Module, error) {
+func GenerateModuleBoilerplate(cfg Config, moduleName, moduleID, customSlug string) (*model.Module, error) { // Add customSlug param
 	if moduleName == "" || moduleID == "" {
 		return nil, fmt.Errorf("module name and ID cannot be empty")
 	}
@@ -189,8 +190,17 @@ func GenerateModuleBoilerplate(cfg Config, moduleName, moduleID string) (*model.
 		Layout:      "",
 		Assets:      nil,
 		Description: "",
-		Slug:        generateSlug(moduleName), // Generate and set the slug
-		Templates:   make([]model.Template, 0, len(cfg.DefaultFiles)),
+		// Slug logic: Use custom slug if provided (and sanitized), otherwise default to moduleID
+		Slug: func() string {
+			if customSlug != "" {
+				// Optionally sanitize the custom slug here if needed
+				// For now, assume the user provides a valid slug via the flag
+				// return generateSlug(customSlug) // Or just use it directly if flag handles validation
+				return customSlug // Using custom slug directly
+			}
+			return moduleID // Default to UUID if no custom slug
+		}(),
+		Templates: make([]model.Template, 0, len(cfg.DefaultFiles)),
 	}
 
 	packageName := sanitizePackageName(moduleName)

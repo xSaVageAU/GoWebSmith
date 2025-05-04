@@ -20,7 +20,8 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 	cfg := DefaultGeneratorConfig(modulesDir)
 
 	// --- Execute ---
-	module, err := GenerateModuleBoilerplate(cfg, moduleName, moduleID)
+	// Pass empty string for customSlug to test default behavior (using ID)
+	module, err := GenerateModuleBoilerplate(cfg, moduleName, moduleID, "")
 	if err != nil {
 		t.Fatalf("GenerateModuleBoilerplate failed: %v", err)
 	}
@@ -54,6 +55,10 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 	if module.Description != "" {
 		t.Errorf("Expected module.Description to be empty string by default, got %q", module.Description)
 	}
+	// Check default slug
+	if module.Slug != moduleID {
+		t.Errorf("Expected module.Slug to default to moduleID (%q), got %q", moduleID, module.Slug)
+	}
 
 	// 3. Check directory structure
 	moduleBasePath := filepath.Join(modulesDir, moduleID)
@@ -72,6 +77,7 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 	handlerPath := filepath.Join(moduleBasePath, "handler.go")
 	baseHTMLPath := filepath.Join(templatesPath, "base.html")
 	styleCSSPath := filepath.Join(templatesPath, "style.css")
+	contentHTMLPath := filepath.Join(templatesPath, "content.html") // Added content.html path
 
 	filesToCheck := []struct {
 		path         string
@@ -98,6 +104,14 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 				return strings.Contains(content, `{{ define "module-style" }}`)
 			},
 		},
+		// Added check for content.html
+		{
+			path: contentHTMLPath,
+			contentCheck: func(content string) bool {
+				return strings.Contains(content, `{{ define "content" }}`) &&
+					strings.Contains(content, `Module ID: {{ .ID }}`)
+			},
+		},
 	}
 
 	for _, fileCheck := range filesToCheck {
@@ -116,7 +130,7 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 	}
 
 	// 5. Check template list in the returned module
-	expectedTemplates := 2 // base.html and style.css
+	expectedTemplates := 3 // base.html, style.css, and content.html
 	if len(module.Templates) != expectedTemplates {
 		t.Errorf("Expected %d templates in module, got %d", expectedTemplates, len(module.Templates))
 	}
@@ -142,6 +156,22 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 	} else {
 		if !styleTmpl.IsActive {
 			t.Errorf("style.css IsActive should be true by default, got false")
+		}
+	}
+
+	// Added check for content.html template metadata
+	contentTmpl, ok := templateMap["content.html"]
+	if !ok {
+		t.Errorf("content.html not found in module templates")
+	} else {
+		if !contentTmpl.IsActive {
+			t.Errorf("content.html IsActive should be true by default, got false")
+		}
+		if contentTmpl.IsBase {
+			t.Errorf("content.html IsBase should be false, got true")
+		}
+		if contentTmpl.Order != 2 {
+			t.Errorf("content.html Order should be 2, got %d", contentTmpl.Order)
 		}
 	}
 }
