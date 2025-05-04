@@ -1,0 +1,7 @@
+# Server Configuration
+server:
+  port: "8443"
+  certFile: "cert.pem"
+  keyFile: "key.pem"
+
+# Add other configuration sections as needed

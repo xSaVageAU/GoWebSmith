@@ -21,6 +21,8 @@ import (
 
 	"go-module-builder/internal/model"
 	"go-module-builder/internal/storage"
+
+	"github.com/spf13/viper"
 )
 
 // --- Configuration ---
@@ -35,13 +37,44 @@ type config struct {
 // --- Main Function ---
 
 func main() {
-	// 1. Define configuration struct and parse flags
-	var cfg config
-	flag.StringVar(&cfg.port, "port", "8443", "Port to listen on for HTTPS")
-	flag.StringVar(&cfg.certFile, "cert-file", "cert.pem", "Path to TLS certificate file")
-	flag.StringVar(&cfg.keyFile, "key-file", "key.pem", "Path to TLS key file")
+	// 1. Setup Viper configuration
+	viper.SetConfigName("config") // name of config file (without extension)
+	viper.SetConfigType("yaml")   // REQUIRED if the config file does not have the extension in the name
+	viper.AddConfigPath(".")      // look for config in the working directory
+	viper.SetEnvPrefix("GOWS")    // Prefix for environment variables (optional)
+	viper.AutomaticEnv()          // Read in environment variables that match
+
+	// Set default values (optional, but good practice)
+	viper.SetDefault("server.port", "8443")
+	viper.SetDefault("server.certFile", "cert.pem")
+	viper.SetDefault("server.keyFile", "key.pem")
+
+	// Read the config file
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// Config file not found; ignore error if desired
+			log.Println("Warning: config.yaml not found, using defaults/flags/env vars.")
+		} else {
+			// Config file was found but another error was produced
+			log.Fatalf("Fatal error reading config file: %v", err)
+		}
+	}
+
+	// 2. Define and parse flags (still needed to potentially override config/defaults)
+	// Note: We don't need the cfg struct anymore if using Viper directly
+	portFlag := flag.String("port", viper.GetString("server.port"), "Port to listen on for HTTPS")
+	certFileFlag := flag.String("cert-file", viper.GetString("server.certFile"), "Path to TLS certificate file")
+	keyFileFlag := flag.String("key-file", viper.GetString("server.keyFile"), "Path to TLS key file")
 	toggleModuleList := flag.Bool("toggle-module-list", false, "Toggle the /modules/list page (default: disabled)")
 	flag.Parse()
+
+	// Bind flags to Viper AFTER parsing, so flags take precedence
+	// Note: Viper doesn't have direct binding for stdlib flag, this is manual override check
+	// A more robust way uses spf13/pflag, but let's keep it simple for now.
+	// We'll just use the flag values directly if they differ from the viper value (which includes config/defaults)
+	finalPort := *portFlag
+	finalCertFile := *certFileFlag
+	finalKeyFile := *keyFileFlag
 
 	// Log module list page status
 	if *toggleModuleList {
@@ -193,12 +226,12 @@ func main() {
 	// Removed 'if router == nil' check as app.routes() always returns a valid handler
 
 	// --- Certificate Handling ---
-	// Use paths from config, assuming they are relative to projectRoot if not absolute
-	certPath := cfg.certFile
+	// Use final config values derived from Viper/Flags
+	certPath := finalCertFile
 	if !filepath.IsAbs(certPath) {
 		certPath = filepath.Join(app.projectRoot, certPath)
 	}
-	keyPath := cfg.keyFile
+	keyPath := finalKeyFile
 	if !filepath.IsAbs(keyPath) {
 		keyPath = filepath.Join(app.projectRoot, keyPath)
 	}
@@ -226,9 +259,9 @@ func main() {
 	log.Println("For production use, configure a proper reverse proxy (like Caddy) with valid certificates.")
 	log.Println("--------------------------------------------------------------------")
 
-	addr := ":" + cfg.port // Use port from config
+	addr := ":" + finalPort // Use final port value
 	fmt.Printf("Starting HTTPS server on https://localhost%s\n", addr)
-	log.Printf("Listening on port %s...", cfg.port) // Use port from config
+	log.Printf("Listening on port %s...", finalPort) // Use final port value
 
 	err = http.ListenAndServeTLS(addr, certPath, keyPath, router) // Pass the router
 	if err != nil {
