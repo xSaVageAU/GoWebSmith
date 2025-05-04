@@ -3,6 +3,8 @@ package main
 import (
 	"go-module-builder/internal/model"
 	"html/template"
+	"io"       // For io.Discard
+	"log/slog" // For slog
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -40,7 +42,8 @@ func newTestApplication(t *testing.T) *application {
 		loadedModules:        make([]*model.Module, 0),
 		baseTemplates:        baseTmpl,
 		moduleTemplates:      make(map[string]*template.Template),
-		moduleTemplatesMutex: sync.RWMutex{}, // Initialize mutex
+		moduleTemplatesMutex: sync.RWMutex{},                                 // Initialize mutex
+		logger:               slog.New(slog.NewTextHandler(io.Discard, nil)), // Add discard logger for tests
 	}
 }
 

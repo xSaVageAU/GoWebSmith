@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"go-module-builder/internal/model"
 	"html/template"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+
+	"log/slog" // Import slog
 
 	"github.com/go-chi/chi/v5" // Import chi
 )
@@ -20,6 +21,7 @@ import (
 
 // application holds the application-wide dependencies.
 type application struct {
+	logger *slog.Logger // Add logger field
 	// Configuration
 	projectRoot         string
 	isModuleListEnabled bool
@@ -58,26 +60,26 @@ func (app *application) routes() http.Handler { // Changed return type
 	// --- Static file servers ---
 	// General static assets
 	staticDir := filepath.Join(app.projectRoot, "web", "static")
-	log.Printf("Router Setup: Serving static files from: %s", staticDir)
+	app.logger.Info("Serving static files", "path", staticDir) // Use slog
 	fileServer := http.FileServer(http.Dir(staticDir))
 	r.Mount("/static", http.StripPrefix("/static/", fileServer)) // Use Mount
 
 	// Module-specific static assets
-	log.Printf("Router Setup: Serving module static files via /modules/{moduleID}/static/*")
-	r.Get("/modules/{moduleID}/static/*", app.handleModuleStaticRequest) // Use chi pattern
+	app.logger.Info("Serving module static files", "pattern", "/modules/{moduleID}/static/*") // Use slog
+	r.Get("/modules/{moduleID}/static/*", app.handleModuleStaticRequest)                      // Use chi pattern
 
 	// --- Page Handlers ---
 	r.Get("/", app.handleRootRequest) // Use r.Get
 
 	// Conditionally register the module list handler
 	if app.isModuleListEnabled {
-		log.Printf("Router Setup: Enabling /modules/list route")
-		r.Get("/modules/list", app.handleModuleListRequest) // Use r.Get
+		app.logger.Info("Enabling module list route", "path", "/modules/list") // Use slog
+		r.Get("/modules/list", app.handleModuleListRequest)                    // Use r.Get
 	}
 
 	// Root-level module page handler (MUST be last to avoid overriding other routes)
-	log.Printf("Router Setup: Enabling /{moduleSlug} route for module pages")
-	r.Get("/{moduleSlug}", app.handleModulePageRequest) // Use slug in pattern
+	app.logger.Info("Enabling module page route", "pattern", "/{moduleSlug}") // Use slog
+	r.Get("/{moduleSlug}", app.handleModulePageRequest)                       // Use slug in pattern
 
 	return r // Return the chi router (which implements http.Handler)
 }
@@ -102,24 +104,24 @@ func (app *application) handleRootRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	if isHTMX {
-		log.Println("HTMX request detected for root. Rendering fragment and clearing module header.")
+		app.logger.Debug("HTMX request detected for root") // Use Debug level
 		headerSwapHTML := `<span id="module-header-info" hx-swap-oob="innerHTML"></span>`
 		_, err := w.Write([]byte(headerSwapHTML))
 		if err != nil {
-			log.Printf("Error writing OOB header clear for root: %v", err)
+			app.logger.Error("Error writing OOB header clear for root", "error", err) // Use slog Error
 		}
 		err = app.baseTemplates.ExecuteTemplate(w, "page", layoutData)
 		if err != nil {
-			log.Printf("Error executing page template for root (HTMX): %v", err)
+			app.logger.Error("Error executing page template for root (HTMX)", "error", err) // Use slog Error
 			if !strings.Contains(err.Error(), "multiple response.WriteHeader calls") {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			}
 		}
 	} else {
-		log.Println("Standard request for root. Rendering full layout.html")
+		app.logger.Debug("Standard request for root") // Use Debug level
 		err := app.baseTemplates.ExecuteTemplate(w, "layout.html", layoutData)
 		if err != nil {
-			log.Printf("Error executing layout template for root: %v", err)
+			app.logger.Error("Error executing layout template for root", "error", err) // Use slog Error
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 	}
@@ -145,10 +147,10 @@ func (app *application) handleModuleListRequest(w http.ResponseWriter, r *http.R
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	log.Println("Rendering module list page (/modules/list)")
+	app.logger.Info("Rendering module list page") // Use Info level
 	err := app.baseTemplates.ExecuteTemplate(w, "layout.html", layoutData)
 	if err != nil {
-		log.Printf("Error executing layout template for module list: %v", err)
+		app.logger.Error("Error executing layout template for module list", "error", err) // Use slog Error
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -159,7 +161,7 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	moduleSlug := chi.URLParam(r, "moduleSlug") // Use moduleSlug param name
 	if moduleSlug == "" {
 		// This case might occur if the route was somehow matched without the param
-		log.Println("Error: Module slug missing in URL parameter for handleModulePageRequest")
+		app.logger.Warn("Module slug missing in URL parameter") // Use Warn level
 		http.NotFound(w, r)
 		return
 	}
@@ -175,12 +177,12 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 
 	// 3. Handle not found or inactive module
 	if targetModule == nil {
-		log.Printf("Module with slug %q not found via URL param", moduleSlug) // Log slug
-		http.NotFound(w, r)                                                   // Treat as 404 if slug doesn't match any loaded module
+		app.logger.Warn("Module not found for slug", "slug", moduleSlug) // Use Warn level with context
+		http.NotFound(w, r)                                              // Treat as 404 if slug doesn't match any loaded module
 		return
 	}
 	if !targetModule.IsActive {
-		log.Printf("Module %s (Slug: %s) is not active (IsActive: %v)", targetModule.Name, moduleSlug, targetModule.IsActive)
+		app.logger.Warn("Attempted to access inactive module", "slug", moduleSlug, "name", targetModule.Name, "id", targetModule.ID) // Use Warn level with context
 		http.Error(w, "Module not available", http.StatusForbidden)
 		return
 	}
@@ -191,7 +193,7 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	app.moduleTemplatesMutex.RUnlock()
 
 	if !ok {
-		log.Printf("Template set not found for module %s (ID: %s). Was it parsed correctly?", targetModule.Name, targetModule.ID)
+		app.logger.Error("Template set not found for module", "name", targetModule.Name, "id", targetModule.ID) // Use Error level with context
 		http.Error(w, "Internal Server Error - Module templates not loaded", http.StatusInternalServerError)
 		return
 	}
@@ -210,10 +212,10 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	var renderedContentBuf bytes.Buffer
 	for _, tmplToRender := range renderableTemplates {
 		definedName := strings.TrimSuffix(tmplToRender.Name, filepath.Ext(tmplToRender.Name))
-		log.Printf("Rendering sub-template with defined name: %s (from file: %s) for module %s (Slug: %s)", definedName, tmplToRender.Name, targetModule.Name, moduleSlug)
+		app.logger.Debug("Rendering sub-template", "template_name", definedName, "module_name", targetModule.Name, "module_slug", moduleSlug) // Use Debug level
 		err := moduleSpecificTemplates.ExecuteTemplate(&renderedContentBuf, definedName, targetModule)
 		if err != nil {
-			log.Printf("ERROR rendering sub-template '%s' for module %s (Slug: %s): %v", definedName, targetModule.Name, moduleSlug, err)
+			app.logger.Error("Error rendering sub-template", "template_name", definedName, "module_name", targetModule.Name, "module_slug", moduleSlug, "error", err) // Use Error level
 		}
 	}
 
@@ -221,7 +223,7 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 		Module:          targetModule,
 		RenderedContent: template.HTML(renderedContentBuf.String()),
 	}
-	log.Printf("Prepared %d sorted templates, rendered into combined content for module %s (Slug: %s) page", len(renderableTemplates), targetModule.Name, moduleSlug)
+	app.logger.Debug("Prepared templates for module page", "count", len(renderableTemplates), "module_name", targetModule.Name, "module_slug", moduleSlug) // Use Debug level
 
 	layoutData := LayoutData{
 		IsModuleListEnabled: app.isModuleListEnabled,
@@ -233,24 +235,24 @@ func (app *application) handleModulePageRequest(w http.ResponseWriter, r *http.R
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if isHTMX {
-		log.Printf("HTMX request detected for module %s (Slug: %s). Rendering OOB header and page fragment.", targetModule.Name, moduleSlug)
+		app.logger.Debug("HTMX request detected for module", "module_name", targetModule.Name, "module_slug", moduleSlug) // Use Debug level
 		headerSwapHTML := fmt.Sprintf(`<span id="module-header-info" hx-swap-oob="innerHTML">Module: %s</span>`, template.HTMLEscapeString(targetModule.Name))
 		_, err := w.Write([]byte(headerSwapHTML))
 		if err != nil {
-			log.Printf("Error writing OOB header swap for module %s (Slug: %s): %v", targetModule.Name, moduleSlug, err)
+			app.logger.Error("Error writing OOB header swap", "module_name", targetModule.Name, "module_slug", moduleSlug, "error", err) // Use Error level
 			return
 		}
 		err = moduleSpecificTemplates.ExecuteTemplate(w, "page", layoutData.PageContent)
 		if err != nil {
-			log.Printf("Error executing 'page' template for module %s (Slug: %s) (HTMX): %v", targetModule.Name, moduleSlug, err)
+			app.logger.Error("Error executing page template (HTMX)", "module_name", targetModule.Name, "module_slug", moduleSlug, "error", err) // Use Error level
 			return
 		}
-		log.Printf("Successfully rendered OOB header and page fragment for module %s (Slug: %s).", targetModule.Name, moduleSlug)
+		app.logger.Debug("Successfully rendered OOB header and page fragment", "module_name", targetModule.Name, "module_slug", moduleSlug) // Use Debug level
 	} else {
-		log.Printf("Standard request for module %s (Slug: %s). Rendering full layout: layout.html", targetModule.Name, moduleSlug)
+		app.logger.Debug("Standard request for module", "module_name", targetModule.Name, "module_slug", moduleSlug) // Use Debug level
 		err := moduleSpecificTemplates.ExecuteTemplate(w, "layout.html", layoutData)
 		if err != nil {
-			log.Printf("Error executing 'layout.html' template for module %s (Slug: %s): %v", targetModule.Name, moduleSlug, err)
+			app.logger.Error("Error executing layout template", "module_name", targetModule.Name, "module_slug", moduleSlug, "error", err) // Use Error level
 			if strings.Contains(err.Error(), "template\" is undefined") {
 				http.Error(w, "Internal Server Error - Module template missing", http.StatusInternalServerError)
 			} else {
@@ -267,7 +269,7 @@ func (app *application) handleModuleStaticRequest(w http.ResponseWriter, r *http
 	filePathParam := chi.URLParam(r, "*")
 
 	if moduleID == "" || filePathParam == "" {
-		log.Printf("Error: Missing moduleID (%q) or filePath (%q) in module static request", moduleID, filePathParam)
+		app.logger.Warn("Missing parameters in module static request", "module_id", moduleID, "file_path", filePathParam) // Use Warn level
 		http.NotFound(w, r)
 		return
 	}
@@ -276,7 +278,7 @@ func (app *application) handleModuleStaticRequest(w http.ResponseWriter, r *http
 	// Join turns cleaned path segments into a valid path for the OS.
 	relativeFilePath := filepath.Join(strings.Split(filePathParam, "/")...)
 	if relativeFilePath == "" || strings.Contains(relativeFilePath, "..") {
-		log.Printf("Error: Invalid file path requested: %q (cleaned: %q)", filePathParam, relativeFilePath)
+		app.logger.Warn("Invalid file path requested in module static request", "requested_path", filePathParam, "cleaned_path", relativeFilePath) // Use Warn level
 		http.Error(w, "Invalid file path", http.StatusBadRequest)
 		return
 	}
@@ -287,15 +289,15 @@ func (app *application) handleModuleStaticRequest(w http.ResponseWriter, r *http
 
 	// Check if file exists and serve it
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		log.Printf("Static file not found for module %s: %s (requested path: %s)", moduleID, filePath, r.URL.Path)
+		app.logger.Warn("Module static file not found", "module_id", moduleID, "path", filePath, "requested_url", r.URL.Path) // Use Warn level
 		http.NotFound(w, r)
 		return
 	} else if err != nil {
-		log.Printf("Error stating static file for module %s: %s. Error: %v", moduleID, filePath, err)
+		app.logger.Error("Error stating module static file", "module_id", moduleID, "path", filePath, "error", err) // Use Error level
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Serving static file for module %s: %s", moduleID, filePath)
+	app.logger.Debug("Serving module static file", "module_id", moduleID, "path", filePath) // Use Debug level
 	http.ServeFile(w, r, filePath)
 }

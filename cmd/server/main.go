@@ -10,7 +10,8 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
-	"log"
+	"log"      // Keep standard log for initial setup/fatal errors
+	"log/slog" // Import slog
 	"math/big"
 	"net"
 	"net/http"
@@ -167,8 +168,14 @@ func main() {
 	log.Println("Finished template preparation.")
 	// --- End Template Parsing ---
 
+	// --- Initialize Logger ---
+	logLevel := new(slog.LevelVar)                                                            // Create a variable to hold the level
+	logLevel.Set(slog.LevelDebug)                                                             // Set the level to DEBUG
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})) // Pass options
+
 	// --- Initialize Application Struct ---
 	app := &application{ // application struct is defined in routes.go
+		logger:              logger, // Pass logger
 		projectRoot:         projRoot,
 		isModuleListEnabled: *toggleModuleList,
 		loadedModules:       modules,
@@ -179,9 +186,7 @@ func main() {
 
 	// --- Create Router ---
 	router := app.routes() // routes method is defined in routes.go
-	if router == nil {     // Check if the returned handler is nil
-		log.Fatalf("Failed to create router.")
-	}
+	// Removed 'if router == nil' check as app.routes() always returns a valid handler
 
 	// --- Certificate Handling ---
 	certPath := filepath.Join(app.projectRoot, certFile)
