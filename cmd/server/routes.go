@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug" // Add debug import
 	"sort"
 	"strings"
 	"sync"
@@ -16,6 +17,25 @@ import (
 
 	"github.com/go-chi/chi/v5" // Import chi
 )
+
+// --- Error Helper Functions ---
+
+// serverError logs the detailed error and sends a generic 500 Internal Server Error response.
+func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	trace := string(debug.Stack()) // Get stack trace
+	app.logger.Error("Internal Server Error", "error", err.Error(), "trace", trace, "method", r.Method, "uri", r.RequestURI)
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+}
+
+// clientError sends a specific status code and corresponding message to the client.
+func (app *application) clientError(w http.ResponseWriter, status int) {
+	http.Error(w, http.StatusText(status), status)
+}
+
+// notFound is a convenience wrapper for sending a 404 Not Found response.
+func (app *application) notFound(w http.ResponseWriter) {
+	app.clientError(w, http.StatusNotFound)
+}
 
 // --- Struct Definitions ---
 
@@ -289,12 +309,12 @@ func (app *application) handleModuleStaticRequest(w http.ResponseWriter, r *http
 
 	// Check if file exists and serve it
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		app.logger.Warn("Module static file not found", "module_id", moduleID, "path", filePath, "requested_url", r.URL.Path) // Use Warn level
-		http.NotFound(w, r)
+		app.logger.Warn("Module static file not found", "module_id", moduleID, "path", filePath, "requested_url", r.URL.Path)
+		app.notFound(w) // Use notFound helper
 		return
 	} else if err != nil {
-		app.logger.Error("Error stating module static file", "module_id", moduleID, "path", filePath, "error", err) // Use Error level
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		app.logger.Error("Error stating module static file", "module_id", moduleID, "path", filePath, "error", err)
+		app.serverError(w, r, err) // Use serverError helper
 		return
 	}
 
