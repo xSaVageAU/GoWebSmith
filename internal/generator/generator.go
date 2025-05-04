@@ -195,8 +195,8 @@ func GenerateModuleBoilerplate(cfg Config, moduleName, moduleID, customSlug stri
 			if customSlug != "" {
 				// Optionally sanitize the custom slug here if needed
 				// For now, assume the user provides a valid slug via the flag
-				// return generateSlug(customSlug) // Or just use it directly if flag handles validation
-				return customSlug // Using custom slug directly
+				return generateSlug(customSlug) // Sanitize the custom slug
+				// return customSlug // Using custom slug directly - REMOVED
 			}
 			return moduleID // Default to UUID if no custom slug
 		}(),
