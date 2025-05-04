@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"go-module-builder/internal/model"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,11 +11,11 @@ import (
 func TestGenerateModuleBoilerplate(t *testing.T) {
 	// --- Setup ---
 	tempDir := t.TempDir() // Create a temporary directory for modules
-	modulesDir := tempDir   // Use the temp dir as the base modules directory
-	
+	modulesDir := tempDir  // Use the temp dir as the base modules directory
+
 	moduleName := "Test Module"
 	moduleID := "test-uuid-123"
-	
+
 	// Create the default configuration
 	cfg := DefaultGeneratorConfig(modulesDir)
 
@@ -37,11 +38,27 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 	if module.Name != moduleName {
 		t.Errorf("Module Name mismatch: got %q, want %q", module.Name, moduleName)
 	}
-	
+	// Check new default fields
+	if !module.IsActive {
+		t.Errorf("Expected module.IsActive to be true by default, got false")
+	}
+	if module.Group != "" {
+		t.Errorf("Expected module.Group to be empty string by default, got %q", module.Group)
+	}
+	if module.Layout != "" {
+		t.Errorf("Expected module.Layout to be empty string by default, got %q", module.Layout)
+	}
+	if module.Assets != nil {
+		t.Errorf("Expected module.Assets to be nil by default, got %v", module.Assets)
+	}
+	if module.Description != "" {
+		t.Errorf("Expected module.Description to be empty string by default, got %q", module.Description)
+	}
+
 	// 3. Check directory structure
 	moduleBasePath := filepath.Join(modulesDir, moduleID)
 	templatesPath := filepath.Join(moduleBasePath, "templates")
-	
+
 	dirsToCheck := []string{moduleBasePath, templatesPath}
 	for _, dir := range dirsToCheck {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -53,25 +70,26 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 
 	// 4. Check file existence and content
 	handlerPath := filepath.Join(moduleBasePath, "handler.go")
-	baseHTMLPath := filepath.Join(templatesPath, "base.html") 
+	baseHTMLPath := filepath.Join(templatesPath, "base.html")
 	styleCSSPath := filepath.Join(templatesPath, "style.css")
-	
+
 	filesToCheck := []struct {
-		path        string
+		path         string
 		contentCheck func(content string) bool
 	}{
 		{
 			path: handlerPath,
 			contentCheck: func(content string) bool {
 				return strings.Contains(content, "package test_module") && // Sanitized package name
-					   strings.Contains(content, `ModuleName: "Test Module"`) // Module name
+					strings.Contains(content, `ModuleName: "Test Module"`) // Module name
 			},
 		},
 		{
 			path: baseHTMLPath,
 			contentCheck: func(content string) bool {
 				return strings.Contains(content, `{{ define "page" }}`) &&
-					   strings.Contains(content, `{{ template "module-style" .Module }}`)
+					strings.Contains(content, `{{ template "module-style" .Module }}`)
+				// Removed check for absence of status line as it exists in a comment: !strings.Contains(content, `<p>Status: {{ .Module.Status }}</p>`)
 			},
 		},
 		{
@@ -91,7 +109,7 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 			t.Errorf("Error reading file %q: %v", fileCheck.path, err)
 			continue
 		}
-		
+
 		if !fileCheck.contentCheck(string(content)) {
 			t.Errorf("File %q content verification failed. Content: %q", fileCheck.path, string(content))
 		}
@@ -102,18 +120,29 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 	if len(module.Templates) != expectedTemplates {
 		t.Errorf("Expected %d templates in module, got %d", expectedTemplates, len(module.Templates))
 	}
-	
+
 	// Check if template names are correct
-	templateNames := make(map[string]bool)
+	templateMap := make(map[string]model.Template)
 	for _, tmpl := range module.Templates {
-		templateNames[tmpl.Name] = true
+		templateMap[tmpl.Name] = tmpl
 	}
-	
-	if !templateNames["base.html"] {
+
+	baseTmpl, ok := templateMap["base.html"]
+	if !ok {
 		t.Errorf("base.html not found in module templates")
+	} else {
+		if !baseTmpl.IsActive {
+			t.Errorf("base.html IsActive should be true by default, got false")
+		}
 	}
-	if !templateNames["style.css"] {
+
+	styleTmpl, ok := templateMap["style.css"]
+	if !ok {
 		t.Errorf("style.css not found in module templates")
+	} else {
+		if !styleTmpl.IsActive {
+			t.Errorf("style.css IsActive should be true by default, got false")
+		}
 	}
 }
 
@@ -121,24 +150,24 @@ func TestGenerateModuleBoilerplate(t *testing.T) {
 func TestAddTemplateToModule(t *testing.T) {
 	// --- Setup ---
 	tempDir := t.TempDir()
-	
+
 	moduleID := "test-module-123"
 	moduleTemplatesDir := filepath.Join(tempDir, moduleID, "templates")
-	
+
 	// Create module directory structure to mimic an existing module
 	if err := os.MkdirAll(moduleTemplatesDir, 0755); err != nil {
 		t.Fatalf("Setup failed: Could not create test module directory structure: %v", err)
 	}
-	
+
 	// Test template name
 	templateName := "card.html"
-	
+
 	// --- Execute ---
 	err := AddTemplateToModule(moduleID, templateName, tempDir)
 	if err != nil {
 		t.Fatalf("AddTemplateToModule failed: %v", err)
 	}
-	
+
 	// --- Verification ---
 	// 1. Check if template file was created
 	templatePath := filepath.Join(moduleTemplatesDir, templateName)
@@ -147,7 +176,7 @@ func TestAddTemplateToModule(t *testing.T) {
 	} else if err != nil {
 		t.Errorf("Error checking template file %q: %v", templatePath, err)
 	}
-	
+
 	// 2. Check template content
 	content, err := os.ReadFile(templatePath)
 	if err != nil {
@@ -158,28 +187,28 @@ func TestAddTemplateToModule(t *testing.T) {
 		if !strings.Contains(string(content), expectedDefine) {
 			t.Errorf("Template content missing expected define block. Content: %q", string(content))
 		}
-		
+
 		// Verify it contains a placeholder div with the template name
 		expectedDiv := `<div class="card-template">`
 		if !strings.Contains(string(content), expectedDiv) {
 			t.Errorf("Template content missing expected div. Content: %q", string(content))
 		}
 	}
-	
+
 	// --- Test Case: Error on non-existent module ---
 	nonExistentID := "non-existent-module"
 	err = AddTemplateToModule(nonExistentID, templateName, tempDir)
 	if err == nil {
 		t.Errorf("Expected error for non-existent module, but got nil")
 	}
-	
+
 	// --- Test Case: Different template name/extension ---
 	cssTemplateName := "custom.css"
 	err = AddTemplateToModule(moduleID, cssTemplateName, tempDir)
 	if err != nil {
 		t.Fatalf("AddTemplateToModule with CSS template failed: %v", err)
 	}
-	
+
 	cssTemplatePath := filepath.Join(moduleTemplatesDir, cssTemplateName)
 	cssContent, err := os.ReadFile(cssTemplatePath)
 	if err != nil {

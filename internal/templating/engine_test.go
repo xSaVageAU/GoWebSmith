@@ -85,7 +85,7 @@ func TestCombineTemplates(t *testing.T) {
 	contentHTML := `{{ define "content" }}
 <div class="module-content">
 	<p>This is the content area for {{ .ID }}</p>
-	<p>Status: {{ .Status }}</p>
+	<p>Active: {{ .IsActive }}</p> {{/* Changed from Status */}}
 </div>
 {{ end }}`
 
@@ -116,7 +116,7 @@ func TestCombineTemplates(t *testing.T) {
 		ID:        moduleID,
 		Name:      "Test Module",
 		Directory: moduleDir,
-		Status:    "active",
+		IsActive:  true, // Changed from Status: "active"
 		CreatedAt: time.Now(),
 		Templates: []model.Template{
 			{Name: "base.html", Path: "templates/base.html"},
@@ -145,7 +145,7 @@ func TestCombineTemplates(t *testing.T) {
 	expectedStrings := []string{
 		`<h1>Test Module</h1>`,
 		`<p>This is the content area for test-module-123</p>`,
-		`<p>Status: active</p>`,
+		`<p>Active: true</p>`, // Changed from Status: active
 		`.module-page {`,
 		`.module-content {`,
 	}
@@ -163,8 +163,8 @@ func TestCombineTemplates_RemovedModule(t *testing.T) {
 	mockStore := &mockDataStore{
 		modules: map[string]*model.Module{
 			moduleID: {
-				ID:     moduleID,
-				Status: "removed",
+				ID:       moduleID,
+				IsActive: false, // Changed from Status: "removed"
 			},
 		},
 	}
@@ -180,7 +180,7 @@ func TestCombineTemplates_RemovedModule(t *testing.T) {
 		t.Fatal("Expected error for removed module, but got nil")
 	}
 
-	expectedErrMsg := "cannot preview module removed-module-456 because it is marked as removed"
+	expectedErrMsg := "cannot preview module removed-module-456 because it is inactive" // Updated error message check
 	if !strings.Contains(err.Error(), expectedErrMsg) {
 		t.Errorf("Expected error message to contain %q, but got: %v", expectedErrMsg, err)
 	}
@@ -189,57 +189,57 @@ func TestCombineTemplates_RemovedModule(t *testing.T) {
 func TestCombineTemplates_NoPageTemplate(t *testing.T) {
 	// Create a temporary directory for our test module
 	tempDir := t.TempDir()
-	
+
 	// Create test module with necessary structure
 	moduleID := "no-page-template-789"
 	moduleDir := filepath.Join(tempDir, moduleID)
 	templatesDir := filepath.Join(moduleDir, "templates")
-	
+
 	if err := os.MkdirAll(templatesDir, 0755); err != nil {
 		t.Fatalf("Failed to create test directories: %v", err)
 	}
-	
+
 	// Create a template file WITHOUT a "page" template definition
 	contentHTML := `{{ define "content" }}
 <div class="module-content">
 	<p>No page template defined</p>
 </div>
 {{ end }}`
-	
+
 	// Write test template file
 	if err := os.WriteFile(filepath.Join(templatesDir, "content.html"), []byte(contentHTML), 0644); err != nil {
 		t.Fatalf("Failed to write content.html: %v", err)
 	}
-	
+
 	// Create mock module data
 	mockModule := &model.Module{
 		ID:        moduleID,
 		Name:      "No Page Template Module",
 		Directory: moduleDir,
-		Status:    "active",
+		IsActive:  true, // Changed from Status: "active"
 		Templates: []model.Template{
 			{Name: "content.html", Path: "templates/content.html"},
 		},
 	}
-	
+
 	// Create mock data store with our test module
 	mockStore := &mockDataStore{
 		modules: map[string]*model.Module{
 			moduleID: mockModule,
 		},
 	}
-	
+
 	// Create the engine with our mock store
 	engine := NewEngine(mockStore)
-	
+
 	// Execute the test
 	_, err := engine.CombineTemplates(moduleID)
-	
+
 	// Verify we get the expected error about missing "page" template
 	if err == nil {
 		t.Fatal("Expected error for missing page template, but got nil")
 	}
-	
+
 	// Check for either of the possible error messages about undefined templates
 	expectedErrMsg1 := "failed to execute template 'page'"
 	expectedErrMsg2 := "is undefined"

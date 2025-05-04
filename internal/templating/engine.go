@@ -27,9 +27,8 @@ func (e *Engine) CombineTemplates(moduleID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to load module %s: %w", moduleID, err)
 	}
-
-	if module.Status == "removed" {
-		return "", fmt.Errorf("cannot preview module %s because it is marked as removed", moduleID)
+	if !module.IsActive { // Check IsActive instead of Status
+		return "", fmt.Errorf("cannot preview module %s because it is inactive", moduleID) // Update error message
 	}
 
 	// 2. Gather all template file paths for this module using Glob

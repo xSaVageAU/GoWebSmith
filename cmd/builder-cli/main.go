@@ -181,11 +181,16 @@ func handleListModules(store storage.DataStore) {
 				}
 			}
 
+			// Determine status string based on IsActive
+			statusStr := "Inactive"
+			if module.IsActive {
+				statusStr = "Active"
+			}
 			// Print details including the non-base template count and status
 			fmt.Printf("- ID: %s\n  Name: %s\n  Status: %s\n  Path: %s\n  Additional Templates: %d\n\n",
 				module.ID,
 				module.Name,
-				module.Status,
+				statusStr, // Use the derived status string
 				module.Directory,
 				nonBaseTemplateCount)
 		}
@@ -380,10 +385,10 @@ func handleDeleteModule(store storage.DataStore, moduleBaseDir, moduleIDs string
 			}
 
 		} else {
-			// --- Soft Delete Logic ---
-			if module.Status == "removed" {
-				fmt.Printf("Module '%s' (ID: %s) is already marked as removed. Skipping.\n", module.Name, trimmedID)
-				continue // Skip if already removed
+			// --- Soft Delete Logic (Mark as Inactive) ---
+			if !module.IsActive { // Check if already inactive
+				fmt.Printf("Module '%s' (ID: %s) is already inactive. Skipping.\n", module.Name, trimmedID)
+				continue // Skip if already inactive
 			}
 			fmt.Println("Performing soft delete (moving files and updating status)...")
 
@@ -424,8 +429,8 @@ func handleDeleteModule(store storage.DataStore, moduleBaseDir, moduleIDs string
 				continue // Skip metadata update if move failed
 			}
 
-			// Update metadata
-			module.Status = "removed"
+			// Update metadata to mark as inactive
+			module.IsActive = false          // Mark as inactive
 			module.Directory = newModulePath // Update path to the new location (or original if dir was missing)
 			module.LastUpdated = time.Now()
 
@@ -563,19 +568,19 @@ func handlePurgeRemovedModules(store storage.DataStore) {
 
 	removedModules := make([]*model.Module, 0)
 	for _, mod := range modules {
-		if mod.Status == "removed" {
+		if !mod.IsActive { // Find inactive modules
 			removedModules = append(removedModules, mod)
 		}
 	}
 
 	if len(removedModules) == 0 {
-		fmt.Println("No modules found with status 'removed'. Nothing to purge.")
+		fmt.Println("No inactive modules found. Nothing to purge.")
 		return
 	}
 
-	fmt.Printf("WARNING: You are about to permanently delete the files and metadata for %d removed module(s).\n", len(removedModules))
+	fmt.Printf("WARNING: You are about to permanently delete the files and metadata for %d inactive module(s).\n", len(removedModules))
 	for _, mod := range removedModules {
-		fmt.Printf("  - %s (%s)\n", mod.Name, mod.ID)
+		fmt.Printf("  - %s (%s) - Marked as Inactive\n", mod.Name, mod.ID)
 	}
 	if !askForConfirmation("Are you sure you want to proceed?") {
 		fmt.Println("Operation cancelled.")
@@ -628,7 +633,7 @@ func handlePurgeRemovedModules(store storage.DataStore) {
 		fmt.Printf("Error: Failed to delete metadata for %d modules (check logs above).\n", failedMetaDelete)
 	}
 	if purgedCount == 0 && failedDirDelete == 0 && failedMetaDelete == 0 {
-		fmt.Println("No modules found with status 'removed'.")
+		fmt.Println("No inactive modules found.")
 	}
 }
 

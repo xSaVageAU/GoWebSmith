@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync" // Added for application struct
 	"testing"
 	"time"
 )
@@ -22,26 +23,35 @@ func getProjectRoot(t *testing.T) string {
 	return filepath.Dir(filepath.Dir(wd))
 }
 
+// Helper to create a minimal valid application instance for testing
+func newTestApplication(t *testing.T) *application {
+	projRoot := getProjectRoot(t)
+
+	// Parse minimal base template needed for most tests
+	templatesPath := filepath.Join(projRoot, "web", "templates")
+	baseTmpl, err := template.ParseFiles(filepath.Join(templatesPath, "layout.html"))
+	if err != nil {
+		t.Fatalf("Failed to parse base layout template for test setup: %v", err)
+	}
+
+	return &application{
+		projectRoot:          projRoot,
+		isModuleListEnabled:  false, // Default, override in specific tests if needed
+		loadedModules:        make([]*model.Module, 0),
+		baseTemplates:        baseTmpl,
+		moduleTemplates:      make(map[string]*template.Template),
+		moduleTemplatesMutex: sync.RWMutex{}, // Initialize mutex
+	}
+}
+
 func TestStaticFileHandler(t *testing.T) {
 	// --- Setup ---
-	// Store original global state and restore later
-	originalProjectRoot := projectRoot
-	originalIsModuleListEnabled := isModuleListEnabled
+	app := newTestApplication(t) // Use helper to create app instance
 
-	// Set globals needed by createServerMux or handlers it attaches
-	projectRoot = getProjectRoot(t) // Set global for the test
-	isModuleListEnabled = false     // Set to a known state for the test
-
-	// Restore original globals after test finishes
-	t.Cleanup(func() {
-		projectRoot = originalProjectRoot
-		isModuleListEnabled = originalIsModuleListEnabled
-	})
-
-	// Get the mux (router) by calling the function extracted in main.go
-	mux := createServerMux()
+	// Get the mux (router) by calling the method on the app instance
+	mux := app.createServerMux()
 	if mux == nil {
-		t.Fatal("createServerMux returned nil")
+		t.Fatal("app.createServerMux returned nil")
 	}
 
 	// --- Create Request & Recorder ---
@@ -59,7 +69,6 @@ func TestStaticFileHandler(t *testing.T) {
 	}
 
 	// 2. Check Content-Type Header
-	// Go's default FileServer adds charset=utf-8 for text types
 	expectedContentType := "text/css; charset=utf-8"
 	if ctype := rr.Header().Get("Content-Type"); ctype != expectedContentType {
 		t.Errorf("handler returned wrong content type: got %q want %q",
@@ -67,14 +76,14 @@ func TestStaticFileHandler(t *testing.T) {
 	}
 
 	// 3. Check Body Content
-	expectedBodyPath := filepath.Join(projectRoot, "web", "static", "test.css")
+	// Use app.projectRoot now
+	expectedBodyPath := filepath.Join(app.projectRoot, "web", "static", "test.css")
 	expectedBodyBytes, err := os.ReadFile(expectedBodyPath)
 	if err != nil {
 		t.Fatalf("Failed to read expected body file %s: %v", expectedBodyPath, err)
 	}
 	expectedBody := string(expectedBodyBytes)
 
-	// Trim whitespace from both actual and expected as files might have trailing newlines etc.
 	if body := strings.TrimSpace(rr.Body.String()); body != strings.TrimSpace(expectedBody) {
 		t.Errorf("handler returned unexpected body:\nGot:\n%s\nWant:\n%s",
 			body, expectedBody)
@@ -83,34 +92,15 @@ func TestStaticFileHandler(t *testing.T) {
 
 func TestHandleRootRequest(t *testing.T) {
 	// --- Setup ---
-	// Store original global state and restore later
-	originalProjectRoot := projectRoot
-	originalIsModuleListEnabled := isModuleListEnabled
-	originalBaseTemplates := baseTemplates
+	app := newTestApplication(t)
+	app.isModuleListEnabled = true // Override default for this test
 
-	// Set globals needed for this test
-	projectRoot = getProjectRoot(t)
-	isModuleListEnabled = true
-	
-	// We need to parse base templates for the root handler to work
-	var err error
-	templatesPath := filepath.Join(projectRoot, "web", "templates")
-	baseTemplates, err = template.ParseFiles(filepath.Join(templatesPath, "layout.html"))
-	if err != nil {
-		t.Fatalf("Failed to parse templates for test: %v", err)
-	}
-	
-	// Restore original globals after test finishes
-	t.Cleanup(func() {
-		projectRoot = originalProjectRoot
-		isModuleListEnabled = originalIsModuleListEnabled
-		baseTemplates = originalBaseTemplates
-	})
+	// Base templates are parsed in newTestApplication helper
 
-	// Get the router using our helper function
-	mux := createServerMux()
+	// Get the router using the method
+	mux := app.createServerMux()
 	if mux == nil {
-		t.Fatal("createServerMux returned nil")
+		t.Fatal("app.createServerMux returned nil")
 	}
 
 	// --- Test Standard Request ---
@@ -131,7 +121,7 @@ func TestHandleRootRequest(t *testing.T) {
 		t.Errorf("Root handler returned wrong content type: got %q want %q",
 			ctype, expectedContentType)
 	}
-	
+
 	// Verify layout was rendered (basic check)
 	if !strings.Contains(rr.Body.String(), "<html") || !strings.Contains(rr.Body.String(), "<body") {
 		t.Errorf("Root handler response doesn't appear to be a complete HTML page")
@@ -154,7 +144,7 @@ func TestHandleRootRequest(t *testing.T) {
 	if strings.Contains(rrHtmx.Body.String(), "<html") || strings.Contains(rrHtmx.Body.String(), "<body") {
 		t.Errorf("HTMX root handler response shouldn't contain full HTML structure")
 	}
-	
+
 	// Verify the OOB swap for clearing module header
 	if !strings.Contains(rrHtmx.Body.String(), `id="module-header-info"`) {
 		t.Errorf("HTMX response missing OOB swap for module header")
@@ -163,59 +153,51 @@ func TestHandleRootRequest(t *testing.T) {
 
 func TestHandleModulePageRequest(t *testing.T) {
 	// --- Setup ---
-	// Store original global state and restore later
-	originalProjectRoot := projectRoot
-	originalModuleTemplates := moduleTemplates
-	originalBaseTemplates := baseTemplates
-	originalLoadedModules := loadedModules
+	app := newTestApplication(t)
+	// Base templates parsed in helper
 
-	// Set globals needed for this test
-	projectRoot = getProjectRoot(t)
-	
-	// Parse base templates
-	var err error
-	templatesPath := filepath.Join(projectRoot, "web", "templates")
-	baseTemplates, err = template.ParseFiles(filepath.Join(templatesPath, "layout.html"))
-	if err != nil {
-		t.Fatalf("Failed to parse templates for test: %v", err)
-	}
-	
 	// Create a test module
 	testModule := &model.Module{
 		ID:          "test-module-123",
 		Name:        "Test Module",
-		Status:      "active",
+		IsActive:    true,
 		CreatedAt:   time.Now(),
 		LastUpdated: time.Now(),
-		Templates:   []model.Template{
+		Templates: []model.Template{
+			// Mock template definitions needed for rendering logic
 			{Name: "base.html", Path: "templates/base.html", IsBase: true, Order: 0},
 			{Name: "content.html", Path: "templates/content.html", IsBase: false, Order: 1},
+			{Name: "widget.tmpl", Path: "templates/widget.tmpl", IsBase: false, Order: 2},
 		},
 	}
-	
-	// Create a mock moduleTemplates map
-	moduleTemplates = make(map[string]*template.Template)
-	// Clone base templates for the test module
-	moduleTemplates[testModule.ID], err = baseTemplates.Clone()
+
+	// Add the test module to the app's loadedModules
+	app.loadedModules = []*model.Module{testModule}
+
+	// Create a mock module template set by cloning base and adding mock definitions
+	// Note: We aren't actually parsing module files here, just setting up the map entry
+	// and ensuring the base layout exists in the cloned set.
+	clonedTemplates, err := app.baseTemplates.Clone()
 	if err != nil {
 		t.Fatalf("Failed to clone base templates: %v", err)
 	}
-	
-	// Add the test module to loadedModules
-	loadedModules = []*model.Module{testModule}
-	
-	// Restore original globals after test finishes
-	t.Cleanup(func() {
-		projectRoot = originalProjectRoot
-		moduleTemplates = originalModuleTemplates
-		baseTemplates = originalBaseTemplates
-		loadedModules = originalLoadedModules
-	})
+	// Add dummy definitions for the templates listed in the model, so ExecuteTemplate doesn't fail immediately
+	// In a real scenario with file parsing, these would be defined by {{define "name"}}
+	_, err = clonedTemplates.Parse(`{{define "content"}}<div>Mock Content</div>{{end}}`)
+	if err != nil {
+		t.Fatalf("Failed to parse mock content template: %v", err)
+	}
+	_, err = clonedTemplates.Parse(`{{define "widget"}}<span>Mock Widget</span>{{end}}`)
+	if err != nil {
+		t.Fatalf("Failed to parse mock widget template: %v", err)
+	}
 
-	// Get the router using our helper function
-	mux := createServerMux()
+	app.moduleTemplates[testModule.ID] = clonedTemplates
+
+	// Get the router
+	mux := app.createServerMux()
 	if mux == nil {
-		t.Fatal("createServerMux returned nil")
+		t.Fatal("app.createServerMux returned nil")
 	}
 
 	// --- Test Valid Module Request ---
@@ -236,6 +218,11 @@ func TestHandleModulePageRequest(t *testing.T) {
 		t.Errorf("Module page handler returned wrong content type: got %q want %q",
 			ctype, expectedContentType)
 	}
+	// Check if the rendered content contains parts of the mock templates
+	bodyStr := rr.Body.String()
+	if !strings.Contains(bodyStr, "Mock Content") || !strings.Contains(bodyStr, "Mock Widget") {
+		t.Errorf("Module page response body does not contain expected rendered sub-template content. Got: %s", bodyStr)
+	}
 
 	// --- Test HTMX Module Request ---
 	reqHtmx := httptest.NewRequest("GET", "/view/module/test-module-123", nil)
@@ -245,9 +232,14 @@ func TestHandleModulePageRequest(t *testing.T) {
 	mux.ServeHTTP(rrHtmx, reqHtmx)
 
 	// Verify HTMX header swap is present
-	if !strings.Contains(rrHtmx.Body.String(), `id="module-header-info"`) || 
-	   !strings.Contains(rrHtmx.Body.String(), `Test Module`) {
+	htmxBodyStr := rrHtmx.Body.String()
+	if !strings.Contains(htmxBodyStr, `id="module-header-info"`) ||
+		!strings.Contains(htmxBodyStr, `Test Module`) {
 		t.Errorf("HTMX module response missing OOB swap with module name")
+	}
+	// Check if the rendered content contains parts of the mock templates
+	if !strings.Contains(htmxBodyStr, "Mock Content") || !strings.Contains(htmxBodyStr, "Mock Widget") {
+		t.Errorf("HTMX module response body does not contain expected rendered sub-template content. Got: %s", htmxBodyStr)
 	}
 
 	// --- Test Invalid Module ID ---
@@ -265,39 +257,36 @@ func TestHandleModulePageRequest(t *testing.T) {
 
 func TestHandleModuleStaticRequest(t *testing.T) {
 	// --- Setup ---
-	// Store original global state and restore later
-	originalProjectRoot := projectRoot
+	app := newTestApplication(t) // Use helper
 
-	// Set global projectRoot for the test
-	projectRoot = getProjectRoot(t)
-	
 	// Create a test directory structure for module static files
 	moduleID := "test-static-module"
-	modulePath := filepath.Join(projectRoot, "modules", moduleID)
+	// Use app.projectRoot
+	modulePath := filepath.Join(app.projectRoot, "modules", moduleID)
 	moduleTemplatesPath := filepath.Join(modulePath, "templates")
 	staticFilePath := filepath.Join(moduleTemplatesPath, "test.css")
-	
+
 	// Create test directories if they don't exist
 	if err := os.MkdirAll(moduleTemplatesPath, 0755); err != nil {
 		t.Fatalf("Failed to create test module directories: %v", err)
 	}
-	
+
 	// Create a test static file
 	staticContent := "body { background-color: #f0f0f0; }"
 	if err := os.WriteFile(staticFilePath, []byte(staticContent), 0644); err != nil {
 		t.Fatalf("Failed to create test static file: %v", err)
 	}
-	
+
 	// Clean up test files after test completes
 	t.Cleanup(func() {
-		projectRoot = originalProjectRoot
+		// Only remove the test directory, no need to restore globals
 		os.RemoveAll(modulePath)
 	})
 
-	// Get the router using our helper function
-	mux := createServerMux()
+	// Get the router
+	mux := app.createServerMux()
 	if mux == nil {
-		t.Fatal("createServerMux returned nil")
+		t.Fatal("app.createServerMux returned nil")
 	}
 
 	// --- Test Valid Static File Request ---
@@ -318,7 +307,7 @@ func TestHandleModuleStaticRequest(t *testing.T) {
 		t.Errorf("Module static handler returned wrong content type: got %q want %q",
 			ctype, expectedContentType)
 	}
-	
+
 	// Verify file content
 	if body := strings.TrimSpace(rr.Body.String()); body != staticContent {
 		t.Errorf("Module static handler returned wrong content: got %q want %q",
@@ -340,52 +329,29 @@ func TestHandleModuleStaticRequest(t *testing.T) {
 
 func TestHandleModuleListRequest(t *testing.T) {
 	// --- Setup ---
-	// Store original global state and restore later
-	originalProjectRoot := projectRoot
-	originalIsModuleListEnabled := isModuleListEnabled
-	originalBaseTemplates := baseTemplates
-	originalLoadedModules := loadedModules
+	app := newTestApplication(t)
+	app.isModuleListEnabled = true // Enable list for this test
+	// Base templates parsed in helper
 
-	// Set globals needed for this test
-	projectRoot = getProjectRoot(t)
-	isModuleListEnabled = true
-	
-	// Parse base templates
-	var err error
-	templatesPath := filepath.Join(projectRoot, "web", "templates")
-	baseTemplates, err = template.ParseFiles(filepath.Join(templatesPath, "layout.html"))
-	if err != nil {
-		t.Fatalf("Failed to parse templates for test: %v", err)
-	}
-	
 	// Create test modules
 	activeModule := &model.Module{
-		ID:     "active-test-module",
-		Name:   "Active Module",
-		Status: "active",
+		ID:       "active-test-module",
+		Name:     "Active Module",
+		IsActive: true,
 	}
-	
 	removedModule := &model.Module{
-		ID:     "removed-test-module",
-		Name:   "Removed Module",
-		Status: "removed",
+		ID:       "removed-test-module",
+		Name:     "Removed Module",
+		IsActive: false,
 	}
-	
-	// Set loadedModules with both active and removed modules
-	loadedModules = []*model.Module{activeModule, removedModule}
-	
-	// Restore original globals after test finishes
-	t.Cleanup(func() {
-		projectRoot = originalProjectRoot
-		isModuleListEnabled = originalIsModuleListEnabled
-		baseTemplates = originalBaseTemplates
-		loadedModules = originalLoadedModules
-	})
 
-	// Get the router using our helper function
-	mux := createServerMux()
+	// Set loadedModules on the app instance
+	app.loadedModules = []*model.Module{activeModule, removedModule}
+
+	// Get the router
+	mux := app.createServerMux()
 	if mux == nil {
-		t.Fatal("createServerMux returned nil")
+		t.Fatal("app.createServerMux returned nil")
 	}
 
 	// --- Test Module List Request ---
@@ -406,12 +372,12 @@ func TestHandleModuleListRequest(t *testing.T) {
 		t.Errorf("Module list handler returned wrong content type: got %q want %q",
 			ctype, expectedContentType)
 	}
-	
+
 	// Verify active module is included
 	if !strings.Contains(rr.Body.String(), "Active Module") {
 		t.Errorf("Module list response should contain active module name")
 	}
-	
+
 	// Verify removed module is NOT included
 	if strings.Contains(rr.Body.String(), "Removed Module") {
 		t.Errorf("Module list response should not contain removed module name")

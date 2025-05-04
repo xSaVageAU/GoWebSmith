@@ -53,7 +53,7 @@ func DefaultGeneratorConfig(baseDir string) Config {
     </style>
     <h2>Module: {{ .Module.Name }} (ID: {{ .Module.ID }})</h2>
     <p>This is the base template for the module.</p>
-    <p>Status: {{ .Module.Status }}</p>
+    {{/* <p>Status: {{ .Module.Status }}</p>  Removed, using IsActive now */}}
     <!-- Inject pre-rendered content from Go handler -->
     {{ .RenderedContent }}
 </div>
@@ -70,6 +70,16 @@ func DefaultGeneratorConfig(baseDir string) Config {
  * CSS for sub-templates will be added below this line
  -->
 {{ end }}`
+
+	// --- NEW: Default content for content.html ---
+	const defaultContentHTMLContent = `{{ define "content" }}
+<!-- Default content for module {{ .Name }} -->
+<div class="default-content">
+    <p>This is the default content template (content.html).</p>
+    <p>Module ID: {{ .ID }}</p>
+</div>
+{{ end }}`
+	// --- END NEW ---
 
 	handlerGoContent := `package {{ .PackageName }} // Dynamic package name
 
@@ -117,6 +127,12 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 				Content: defaultStyleCSSContent,
 				SubDir:  "templates",
 			},
+			// --- NEW: Add content.html to default files ---
+			"content.html": {
+				Content: defaultContentHTMLContent,
+				SubDir:  "templates",
+			},
+			// --- END NEW ---
 		},
 	}
 }
@@ -148,9 +164,13 @@ func GenerateModuleBoilerplate(cfg Config, moduleName, moduleID string) (*model.
 		ID:          moduleID,
 		Name:        moduleName,
 		Directory:   moduleDir,
-		Status:      "active",
 		CreatedAt:   now,
 		LastUpdated: now,
+		IsActive:    true, // Default new modules to active
+		Group:       "",
+		Layout:      "",
+		Assets:      nil,
+		Description: "",
 		Templates:   make([]model.Template, 0, len(cfg.DefaultFiles)),
 	}
 
@@ -170,23 +190,33 @@ func GenerateModuleBoilerplate(cfg Config, moduleName, moduleID string) (*model.
 		}
 		fmt.Printf("Created file: %s\n", filePath)
 
+		// --- UPDATED: Metadata creation logic ---
 		if fileInfo.SubDir == "templates" {
-			isBase := (filename == "base.html")
-			order := 0
-			if filename == "base.html" {
+			isBase := false
+			order := 99 // Default high order
+
+			switch filename {
+			case "base.html":
+				isBase = true
 				order = 0
-			} else if filename == "style.css" {
+			case "style.css":
+				isBase = false // Style is not a base HTML template
 				order = 1
+			case "content.html":
+				isBase = false // Content is not a base HTML template
+				order = 2      // Set order for content
 			}
 
 			template := model.Template{
-				Name:   filename,
-				Path:   filepath.Join(fileInfo.SubDir, filename),
-				IsBase: isBase,
-				Order:  order,
+				Name:     filename,
+				Path:     filepath.Join(fileInfo.SubDir, filename),
+				IsBase:   isBase,
+				Order:    order,
+				IsActive: true, // Default template to active
 			}
 			newModule.Templates = append(newModule.Templates, template)
 		}
+		// --- END UPDATED ---
 	}
 
 	return newModule, nil

@@ -24,14 +24,18 @@
     </header>
 
     <main id="main-content">
-        {{ block "page" .PageContent }}
-            {{ if . }}
-                {{ if eq (printf "%T" .) "[]*model.Module" }}
+        {{ block "page" .PageContent }} {{/* Context here is .PageContent from LayoutData */}}
+            {{ if . }} {{/* Check if PageContent is not nil */}}
+                {{ if eq (printf "%T" .) "main.PageData" }}
+                    {{/* If it's PageData, output the pre-rendered content */}}
+                    {{ .RenderedContent }}
+                {{ else if eq (printf "%T" .) "[]*model.Module" }}
+                    {{/* Existing logic for module list */}}
                     <h2>Available Modules</h2>
                     <ul>
                         {{ range . }}
                             <li>
-                                {{ .Name }} (ID: {{ .ID }}) - Status: {{ .Status }}
+                                {{ .Name }} (ID: {{ .ID }}) - Status: {{ if .IsActive }}Active{{ else }}Inactive{{ end }}
                                 <br>
                                 <a href="/view/module/{{ .ID }}">View Page</a> |
                                 <button hx-get="/view/module/{{ .ID }}" hx-target="#main-content" hx-push-url="true">Load Module (HTMX)</button>
@@ -40,8 +44,12 @@
                             <p>No active modules found.</p>
                         {{ end }}
                     </ul>
-                {{ end }}
+                 {{ else }}
+                    {{/* Fallback for unexpected types */}}
+                    <p>Unknown page content type: {{ printf "%T" . }}</p>
+                 {{ end }}
             {{ else }}
+                 {{/* Existing logic for root page when PageContent is nil */}}
                  <p>Welcome! Use the navigation to view modules.</p>
             {{ end }}
         {{ end }}

@@ -14,16 +14,21 @@ import (
 func createSampleModule(id, name string) *model.Module {
 	now := time.Now()
 	return &model.Module{
-		ID:          id,
-		Name:        name,
-		Directory:   filepath.Join("modules", id), // Example path
-		Status:      "active",
+		ID:        id,
+		Name:      name,
+		Directory: filepath.Join("modules", id), // Example path
+		// Status:      "active", // Replaced by IsActive
 		CreatedAt:   now,
 		LastUpdated: now,
+		IsActive:    true,                               // Default to active for tests
+		Group:       "TestGroup",                        // Sample group
+		Layout:      "layouts/test-layout.html",         // Sample layout path
+		Assets:      []string{"global.css", "logo.png"}, // Sample assets
 		Templates: []model.Template{
-			{Name: "base.html", Path: "templates/base.html", IsBase: true, Order: 0},
-			{Name: "style.css", Path: "templates/style.css", IsBase: false, Order: 1},
+			{Name: "base.html", Path: "templates/base.html", IsBase: true, Order: 0, IsActive: true}, // Assume templates active by default
+			{Name: "style.css", Path: "templates/style.css", IsBase: false, Order: 1, IsActive: true},
 		},
+		Description: "A sample module for testing.", // Sample description
 	}
 }
 
@@ -88,8 +93,26 @@ func TestSaveLoadModule(t *testing.T) {
 	loadedModule.LastUpdated = loadedModule.LastUpdated.Truncate(time.Second)
 
 	if !reflect.DeepEqual(originalModule, loadedModule) {
-		t.Errorf("LoadModule() loaded module does not match original.\nOriginal: %+v\nLoaded:   %+v", originalModule, loadedModule)
+		t.Errorf("LoadModule() loaded module does not match original (DeepEqual).\nOriginal: %+v\nLoaded:   %+v", originalModule, loadedModule)
 	}
+
+	// Explicit checks for new fields
+	if loadedModule.IsActive != originalModule.IsActive {
+		t.Errorf("IsActive mismatch: got %v, want %v", loadedModule.IsActive, originalModule.IsActive)
+	}
+	if loadedModule.Group != originalModule.Group {
+		t.Errorf("Group mismatch: got %q, want %q", loadedModule.Group, originalModule.Group)
+	}
+	if loadedModule.Layout != originalModule.Layout {
+		t.Errorf("Layout mismatch: got %q, want %q", loadedModule.Layout, originalModule.Layout)
+	}
+	if !reflect.DeepEqual(loadedModule.Assets, originalModule.Assets) {
+		t.Errorf("Assets mismatch: got %v, want %v", loadedModule.Assets, originalModule.Assets)
+	}
+	if loadedModule.Description != originalModule.Description {
+		t.Errorf("Description mismatch: got %q, want %q", loadedModule.Description, originalModule.Description)
+	}
+
 }
 
 func TestLoadModule_NotFound(t *testing.T) {
@@ -208,7 +231,24 @@ func TestReadAll(t *testing.T) {
 		loadedMod.LastUpdated = loadedMod.LastUpdated.Truncate(time.Second)
 
 		if !reflect.DeepEqual(originalMod, loadedMod) {
-			t.Errorf("ReadAll() loaded module %s does not match original.\nOriginal: %+v\nLoaded:   %+v", loadedMod.ID, originalMod, loadedMod)
+			t.Errorf("ReadAll() loaded module %s does not match original (DeepEqual).\nOriginal: %+v\nLoaded:   %+v", loadedMod.ID, originalMod, loadedMod)
+		}
+
+		// Explicit checks for new fields
+		if loadedMod.IsActive != originalMod.IsActive {
+			t.Errorf("ReadAll() IsActive mismatch for %s: got %v, want %v", loadedMod.ID, loadedMod.IsActive, originalMod.IsActive)
+		}
+		if loadedMod.Group != originalMod.Group {
+			t.Errorf("ReadAll() Group mismatch for %s: got %q, want %q", loadedMod.ID, loadedMod.Group, originalMod.Group)
+		}
+		if loadedMod.Layout != originalMod.Layout {
+			t.Errorf("ReadAll() Layout mismatch for %s: got %q, want %q", loadedMod.ID, loadedMod.Layout, originalMod.Layout)
+		}
+		if !reflect.DeepEqual(loadedMod.Assets, originalMod.Assets) {
+			t.Errorf("ReadAll() Assets mismatch for %s: got %v, want %v", loadedMod.ID, loadedMod.Assets, originalMod.Assets)
+		}
+		if loadedMod.Description != originalMod.Description {
+			t.Errorf("ReadAll() Description mismatch for %s: got %q, want %q", loadedMod.ID, loadedMod.Description, originalMod.Description)
 		}
 	}
 }
