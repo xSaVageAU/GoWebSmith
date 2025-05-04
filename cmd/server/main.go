@@ -23,19 +23,23 @@ import (
 	"go-module-builder/internal/storage"
 )
 
-// Struct definitions (application, PageData, LayoutData) are now in routes.go
+// --- Configuration ---
+type config struct {
+	port     string
+	certFile string
+	keyFile  string
+}
 
-// --- Constants ---
-const (
-	certFile = "cert.pem"
-	keyFile  = "key.pem"
-)
+// Struct definitions (application, PageData, LayoutData) are now in routes.go
 
 // --- Main Function ---
 
 func main() {
-	// 1. Define and parse command-line flags
-	port := flag.String("port", "8443", "Port to listen on for HTTPS")
+	// 1. Define configuration struct and parse flags
+	var cfg config
+	flag.StringVar(&cfg.port, "port", "8443", "Port to listen on for HTTPS")
+	flag.StringVar(&cfg.certFile, "cert-file", "cert.pem", "Path to TLS certificate file")
+	flag.StringVar(&cfg.keyFile, "key-file", "key.pem", "Path to TLS key file")
 	toggleModuleList := flag.Bool("toggle-module-list", false, "Toggle the /modules/list page (default: disabled)")
 	flag.Parse()
 
@@ -189,8 +193,15 @@ func main() {
 	// Removed 'if router == nil' check as app.routes() always returns a valid handler
 
 	// --- Certificate Handling ---
-	certPath := filepath.Join(app.projectRoot, certFile)
-	keyPath := filepath.Join(app.projectRoot, keyFile)
+	// Use paths from config, assuming they are relative to projectRoot if not absolute
+	certPath := cfg.certFile
+	if !filepath.IsAbs(certPath) {
+		certPath = filepath.Join(app.projectRoot, certPath)
+	}
+	keyPath := cfg.keyFile
+	if !filepath.IsAbs(keyPath) {
+		keyPath = filepath.Join(app.projectRoot, keyPath)
+	}
 
 	_, certErr := os.Stat(certPath)
 	_, keyErr := os.Stat(keyPath)
@@ -215,9 +226,9 @@ func main() {
 	log.Println("For production use, configure a proper reverse proxy (like Caddy) with valid certificates.")
 	log.Println("--------------------------------------------------------------------")
 
-	addr := ":" + *port
+	addr := ":" + cfg.port // Use port from config
 	fmt.Printf("Starting HTTPS server on https://localhost%s\n", addr)
-	log.Printf("Listening on port %s...", *port)
+	log.Printf("Listening on port %s...", cfg.port) // Use port from config
 
 	err = http.ListenAndServeTLS(addr, certPath, keyPath, router) // Pass the router
 	if err != nil {
