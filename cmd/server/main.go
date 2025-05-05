@@ -25,13 +25,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// --- Configuration ---
-type config struct {
-	port     string
-	certFile string
-	keyFile  string
-}
-
 // Struct definitions (application, PageData, LayoutData) are now in routes.go
 
 // --- Main Function ---
