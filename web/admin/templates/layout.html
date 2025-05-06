@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Module Builder - Admin</title>
+    <!-- Link to a CSS file later if needed -->
+    <!-- <link rel="stylesheet" href="/admin/static/style.css"> -->
+    <style>
+        body { font-family: sans-serif; margin: 0; }
+        header { background-color: #333; color: white; padding: 1rem; }
+        nav { background-color: #f4f4f4; padding: 1rem; }
+        nav ul { list-style: none; padding: 0; margin: 0; }
+        nav ul li { display: inline; margin-right: 1rem; }
+        main { padding: 1rem; }
+        footer { background-color: #eee; padding: 1rem; text-align: center; margin-top: 2rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Go Module Builder - Admin</h1>
+    </header>
+    <nav>
+        <ul>
+            <li><a href="/admin/">Dashboard</a></li>
+            <!-- Add other navigation links later -->
+            <!-- <li><a href="/admin/modules/new">Create Module</a></li> -->
+            <!-- <li><a href="/admin/assets">Global Assets</a></li> -->
+        </ul>
+    </nav>
+    <main>
+        {{ block "content" . }}
+            <!-- Default content if block is not defined -->
+            <p>Welcome to the Admin Interface.</p>
+        {{ end }}
+    </main>
+    <footer>
+        <p>&copy; {{ .CurrentYear }} Go Module Builder</p>
+    </footer>
+</body>
+</html>

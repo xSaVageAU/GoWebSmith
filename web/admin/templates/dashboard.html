@@ -1,0 +1,53 @@
+{{ define "content" }}
+<h2>Dashboard</h2>
+<p>Welcome to the Go Module Builder administration panel.</p>
+
+<h3>Modules Overview</h3>
+<div id="module-list">
+    {{ if .Error }}
+        <p style="color: red;">Error: {{ .Error }}</p>
+    {{ else if not .Modules }}
+        <p>No modules found.</p>
+    {{ else }}
+        <style>
+            table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+        </style>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Slug</th>
+                    <th>Status</th>
+                    <th>Templates</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Modules }}
+                <tr>
+                    <td>{{ .ID }}</td>
+                    <td>{{ .Name }}</td>
+                    <td>{{ .Slug }}</td>
+                    <td>{{ if .IsActive }}Active{{ else }}Inactive{{ end }}</td>
+                    <td>{{ len .Templates }}</td>
+                    <td>
+                        <!-- Action buttons will go here later -->
+                        <button disabled>Edit Code</button>
+                        <button disabled>Delete</button>
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    {{ end }}
+</div>
+
+<!-- Add other dashboard elements later -->
+<p style="margin-top: 1em;">
+    <button disabled>Create New Module</button>
+</p>
+
+{{ end }}

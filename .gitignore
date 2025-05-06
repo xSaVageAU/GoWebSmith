@@ -29,12 +29,12 @@ server.exe
 chat*.md
 PLAN.md
 PLAN_REVISED.md
-
+FINAL_PLAN_UI.md
 # Module data and generated files
 .module_metadata/
 modules/
 modules_removed/
-
+# UI_PLAN.md # Temporarily commented out to allow commit on feature branch
 # Temporary files
 Last task.md
 summary.md
