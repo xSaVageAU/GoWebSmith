@@ -4,20 +4,17 @@ import (
 	"bufio" // Added for reading user input
 	"flag"
 	"fmt"
-	"go-module-builder/internal/generator"
-	"go-module-builder/internal/model"
+	"go-module-builder/internal/modulemanager" // Import the new manager package
 	"go-module-builder/internal/storage"
 	"go-module-builder/internal/templating"
 	"go-module-builder/pkg/fsutils"
 	"log"
+	"log/slog" // Import slog for the manager
 	"os"
 	"os/exec" // Added for opening browser
 	"path/filepath"
 	"runtime" // Added for OS detection
 	"strings" // Added for trimming user input
-	"time"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -44,6 +41,13 @@ func main() {
 	}
 	// Initialize the templating engine
 	templateEngine := templating.NewEngine(store)
+
+	// Initialize Module Manager
+	// Use standard log for CLI output, but maybe a structured logger for the manager itself?
+	// For now, let's pass nil to use the manager's default discard logger for internal operations.
+	// Or create a simple slog logger. Let's create one.
+	cliLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})) // Log manager errors to stderr
+	manager := modulemanager.NewManager(store, cliLogger, projectRoot, moduleStorageDir)
 
 	fmt.Printf("Using storage path: %s\n", storagePath)
 	fmt.Printf("Using modules base path: %s\n", moduleStorageDir)
@@ -100,7 +104,13 @@ func main() {
 			createCmd.Usage()
 			return
 		}
-		handleCreateModule(store, moduleStorageDir, *createName, *createSlug) // Pass slug flag
+		// Call the manager's CreateModule method
+		_, err := manager.CreateModule(*createName, *createSlug)
+		if err != nil {
+			// Use standard log for fatal CLI errors
+			log.Fatalf("Error creating module via manager: %v", err)
+		}
+		// Success message is now handled within the manager method's logging
 	case "delete":
 		deleteCmd.Parse(os.Args[2:])
 		// Check flags *after* parsing
@@ -110,7 +120,8 @@ func main() {
 			os.Exit(1)
 		}
 		// Pass necessary paths and flags to the handler
-		handleDeleteModule(store, moduleStorageDir, *deleteID, *deleteForce, *deleteNukeAll)
+		// Pass the manager instance to the handler
+		handleDeleteModule(manager, *deleteID, *deleteForce, *deleteNukeAll)
 	case "preview":
 		previewCmd.Parse(os.Args[2:])
 		if *previewID == "" {
@@ -126,10 +137,16 @@ func main() {
 			addTemplateCmd.Usage()
 			return
 		}
-		handleAddTemplate(store, *addTemplateModuleID, *addTemplateName)
+		// Call the manager's AddTemplate method
+		_, err := manager.AddTemplate(*addTemplateModuleID, *addTemplateName)
+		if err != nil {
+			log.Fatalf("Error adding template via manager: %v", err)
+		}
+		// Success message handled by manager logging
 	case "purge-removed":
 		purgeRemovedCmd.Parse(os.Args[2:])
-		handlePurgeRemovedModules(store)
+		// Call the manager's PurgeRemovedModules method
+		handlePurgeRemovedModules(manager) // Pass manager instead of store
 
 	// --- New: Handle update command ---
 	case "update":
@@ -147,7 +164,12 @@ func main() {
 			return
 		}
 		// Pass all flags to the handler
-		handleUpdateModule(store, *updateID, *updateName, *updateSlug, *updateGroup, *updateLayout, *updateDesc)
+		// Call the manager's UpdateModule method
+		err := manager.UpdateModule(*updateID, *updateName, *updateSlug, *updateGroup, *updateLayout, *updateDesc)
+		if err != nil {
+			log.Fatalf("Error updating module via manager: %v", err)
+		}
+		// Success message is handled by manager logging
 
 	default:
 		fmt.Printf("Unknown command: %s\n", os.Args[1])
@@ -211,35 +233,9 @@ func handleListModules(store storage.DataStore) {
 	}
 }
 
-func handleCreateModule(store storage.DataStore, moduleBaseDir, moduleName, customSlug string) { // Add customSlug param
-	fmt.Printf("\nCreating module: %s\n", moduleName)
-	if customSlug != "" {
-		fmt.Printf("Using custom slug: %s\n", customSlug)
-	}
-
-	// 1. Generate unique ID
-	moduleID := uuid.New().String()
-	fmt.Printf("Generated Module ID: %s\n", moduleID)
-
-	// 2. Get generator config
-	genConfig := generator.DefaultGeneratorConfig(moduleBaseDir)
-
-	// 3. Generate boilerplate files/dirs, passing the custom slug
-	newModule, err := generator.GenerateModuleBoilerplate(genConfig, moduleName, moduleID, customSlug)
-	if err != nil {
-		log.Fatalf("Error generating module boilerplate: %v", err)
-		// Consider more graceful error handling / cleanup here
-	}
-
-	// 4. Save module metadata
-	err = store.SaveModule(newModule)
-	if err != nil {
-		log.Fatalf("Error saving module metadata: %v", err)
-		// Consider cleanup of generated files if metadata save fails
-	}
-
-	fmt.Printf("Successfully created module '%s' with ID '%s' in directory '%s'\n", moduleName, moduleID, newModule.Directory)
-}
+// func handleCreateModule(store storage.DataStore, moduleBaseDir, moduleName, customSlug string) {
+// 	// --- This logic is now moved to internal/modulemanager/manager.go ---
+// }
 
 // Helper function for confirmation prompts
 func askForConfirmation(prompt string) bool {
@@ -263,8 +259,9 @@ func askForConfirmation(prompt string) bool {
 // handleDeleteModule handles deleting modules.
 // If nukeAll is true, it deletes ALL modules and metadata.
 // Otherwise, it deletes modules based on comma-separated IDs.
-func handleDeleteModule(store storage.DataStore, moduleBaseDir, moduleIDs string, force, nukeAll bool) {
-	// --- Nuke All Logic ---
+// Pass ModuleManager instead of store and moduleBaseDir
+func handleDeleteModule(manager *modulemanager.ModuleManager, moduleIDs string, force, nukeAll bool) {
+	// --- Nuke All Logic (Remains in CLI for now) ---
 	if nukeAll {
 		fmt.Println("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 		fmt.Println("!!! DANGER: --nuke-all flag detected.                    !!!")
@@ -279,8 +276,11 @@ func handleDeleteModule(store storage.DataStore, moduleBaseDir, moduleIDs string
 
 		fmt.Println("Proceeding with --nuke-all...")
 
-		removedModulesDir := filepath.Join(filepath.Dir(moduleBaseDir), "modules_removed") // Construct removed path relative to base
-		storagePath := store.GetBasePath()
+		// Get paths from manager or config if possible in future?
+		// For now, assume standard structure relative to project root.
+		moduleBaseDir := manager.GetModulesDir() // Need to add GetModulesDir() to manager
+		removedModulesDir := filepath.Join(manager.GetProjectRoot(), "modules_removed")
+		storagePath := manager.GetStoreBasePath() // Need to add GetStoreBasePath() to manager
 
 		pathsToDelete := []string{moduleBaseDir, removedModulesDir, storagePath}
 		failedDeletes := 0
@@ -326,7 +326,7 @@ func handleDeleteModule(store storage.DataStore, moduleBaseDir, moduleIDs string
 		return // Stop processing after nuke
 	}
 
-	// --- ID-Based Delete Logic (Original logic starts here) ---
+	// --- ID-Based Delete Logic (Uses ModuleManager) ---
 	ids := strings.Split(moduleIDs, ",")
 	fmt.Printf("\nAttempting to process delete for %d module ID(s) (Force: %v)\n", len(ids), force)
 
@@ -341,126 +341,34 @@ func handleDeleteModule(store storage.DataStore, moduleBaseDir, moduleIDs string
 
 		fmt.Printf("--- Processing ID: %s ---\n", trimmedID)
 
-		// 1. Load module metadata first to get directory path etc.
-		module, err := store.LoadModule(trimmedID)
-		if err != nil {
-			// If it's already gone, maybe that's okay?
-			if os.IsNotExist(err) {
-				fmt.Printf("Module metadata for ID %s not found. Skipping.\n", trimmedID)
-				// Consider this a success in the context of bulk delete?
-				// Or maybe just don't count it? Let's not count it.
+		// Confirmation prompt (remains in CLI)
+		if force {
+			// Need to load module name for prompt if possible, or use generic prompt
+			// Let's try loading first, but handle if it fails (e.g., already deleted)
+			moduleName := trimmedID                                  // Default to ID if name can't be loaded
+			mod, loadErr := manager.GetStore().LoadModule(trimmedID) // Need GetStore() method
+			if loadErr == nil {
+				moduleName = mod.Name
+			} else if !os.IsNotExist(loadErr) {
+				log.Printf("Warning: Could not load module %s to confirm name before force delete: %v", trimmedID, loadErr)
+			} // If IsNotExist, proceed with generic prompt
+
+			fmt.Printf("WARNING: You are about to permanently delete module '%s' (ID: %s) and all its files.\n", moduleName, trimmedID)
+			if !askForConfirmation("Are you sure you want to proceed?") {
+				fmt.Println("Operation cancelled for this ID.")
+				failCount++ // Count cancellation as failure/skip
 				continue
 			}
-			log.Printf("Error loading module metadata for ID %s: %v. Skipping this ID.", trimmedID, err)
-			failCount++
-			continue
 		}
 
-		var deleteErr error
-		if force {
-			// --- Force Delete Logic ---
-			fmt.Printf("WARNING: You are about to permanently delete module '%s' (ID: %s) and all its files.\n", module.Name, trimmedID)
-			if !askForConfirmation("Are you sure you want to proceed?") {
-				fmt.Println("Operation cancelled.")
-				continue
-			}
-
-			fmt.Println("Performing force delete...")
-
-			// Delete the actual module directory
-			if module.Directory != "" {
-				if _, err := os.Stat(module.Directory); err == nil {
-					fmt.Printf("Attempting to delete module directory: %s\n", module.Directory)
-					err = os.RemoveAll(module.Directory)
-					if err != nil {
-						log.Printf("Warning: failed to force delete module directory %s: %v", module.Directory, err)
-						// Decide if we should proceed with metadata deletion or stop
-						// Let's proceed but record the error
-						deleteErr = fmt.Errorf("failed to delete directory: %w", err)
-					}
-				} else if !os.IsNotExist(err) {
-					// Log error if stat failed for reasons other than not existing
-					log.Printf("Warning: could not stat module directory %s before force delete: %v", module.Directory, err)
-					deleteErr = fmt.Errorf("failed to stat directory: %w", err)
-				}
-			}
-
-			// Delete the metadata (only if directory deletion didn't fail critically?)
-			if deleteErr == nil { // Only delete metadata if directory part was ok or skipped
-				err = store.DeleteModule(trimmedID)
-				if err != nil {
-					log.Printf("Error force deleting module metadata for ID %s: %v", trimmedID, err)
-					deleteErr = fmt.Errorf("failed to delete metadata: %w", err)
-				}
-			}
-
-			if deleteErr == nil {
-				fmt.Printf("Successfully force deleted module '%s' (ID: %s).\n", module.Name, trimmedID)
-				successCount++
-			} else {
-				failCount++
-			}
-
+		// Call the manager's DeleteModule method
+		err := manager.DeleteModule(trimmedID, force)
+		if err != nil {
+			// Log the error from the manager
+			log.Printf("Error processing delete for ID %s: %v", trimmedID, err)
+			failCount++
 		} else {
-			// --- Soft Delete Logic (Mark as Inactive) ---
-			if !module.IsActive { // Check if already inactive
-				fmt.Printf("Module '%s' (ID: %s) is already inactive. Skipping.\n", module.Name, trimmedID)
-				continue // Skip if already inactive
-			}
-			fmt.Println("Performing soft delete (moving files and updating status)...")
-
-			removedModulesDir := "modules_removed" // Define the directory for removed modules
-			newModulePath := filepath.Join(removedModulesDir, trimmedID)
-
-			// Ensure the base removed directory exists
-			if err := fsutils.CreateDir(removedModulesDir); err != nil {
-				log.Printf("Failed to create directory for removed modules '%s' for ID %s: %v. Skipping this ID.", removedModulesDir, trimmedID, err)
-				failCount++
-				continue
-			}
-
-			moveFailed := false
-			// Check if the original directory exists before trying to move
-			if _, err := os.Stat(module.Directory); err == nil {
-				// Attempt to move the directory
-				fmt.Printf("Moving directory %s to %s\n", module.Directory, newModulePath)
-				err = os.Rename(module.Directory, newModulePath)
-				if err != nil {
-					log.Printf("Failed to move module directory to removed location for ID %s: %v", trimmedID, err)
-					moveFailed = true
-					// Don't update metadata if move failed?
-					// Let's skip metadata update if move fails
-				}
-			} else if os.IsNotExist(err) {
-				fmt.Printf("Warning: Original module directory %s not found for ID %s. Only updating metadata status.\n", module.Directory, trimmedID)
-				newModulePath = module.Directory // Keep original path in metadata if dir was missing
-			} else {
-				// Stat failed for another reason
-				log.Printf("Failed to check original module directory %s for ID %s: %v. Skipping this ID.", module.Directory, trimmedID, err)
-				failCount++
-				continue
-			}
-
-			if moveFailed {
-				failCount++
-				continue // Skip metadata update if move failed
-			}
-
-			// Update metadata to mark as inactive
-			module.IsActive = false          // Mark as inactive
-			module.Directory = newModulePath // Update path to the new location (or original if dir was missing)
-			module.LastUpdated = time.Now()
-
-			err = store.SaveModule(module) // Use SaveModule which acts like Update
-			if err != nil {
-				// Attempt to rollback the move? Complex.
-				log.Printf("Error updating module metadata to 'removed' status for ID %s: %v", trimmedID, err)
-				failCount++
-				continue
-			}
-
-			fmt.Printf("Successfully marked module '%s' (ID: %s) as removed.\n", module.Name, trimmedID)
-			fmt.Printf("Module files moved to: %s\n", newModulePath)
+			// Success message is now handled by manager's logging
 			successCount++
 		}
 	}
@@ -521,189 +429,55 @@ func openBrowser(url string) error {
 	return cmd.Start() // Use Start for non-blocking execution
 }
 
-func handleAddTemplate(store storage.DataStore, moduleID, templateName string) {
-	fmt.Printf("\nAdding template '%s' to module ID: %s\n", templateName, moduleID)
+// func handleAddTemplate(store storage.DataStore, moduleID, templateName string) {
+// 	// --- This logic is now moved to internal/modulemanager/manager.go ---
+// }
 
-	// 1. Load the module metadata
-	module, err := store.LoadModule(moduleID)
-	if err != nil {
-		log.Fatalf("Error loading module metadata for ID %s: %v", moduleID, err)
-	}
-
-	// 2. Check if template name already exists in metadata
-	for _, t := range module.Templates {
-		if t.Name == templateName {
-			log.Fatalf("Error: Template '%s' already exists in module %s metadata.", templateName, moduleID)
-		}
-	}
-
-	// 3. Call the generator to create the physical template file
-	modulesDir := filepath.Dir(module.Directory) // Get the parent dir (e.g., "modules")
-	err = generator.AddTemplateToModule(moduleID, templateName, modulesDir)
-	if err != nil {
-		log.Fatalf("Error creating template file via generator: %v", err)
-	}
-
-	// 4. Determine the next order number
-	maxOrder := -1
-	for _, t := range module.Templates {
-		if t.Order > maxOrder {
-			maxOrder = t.Order
-		}
-	}
-	newOrder := maxOrder + 1
-
-	// 5. Create new Template metadata
-	templateSubDir := "templates"
-	relativePath := filepath.Join(templateSubDir, templateName)
-	newTemplate := model.Template{
-		Name:   templateName,
-		Path:   relativePath,
-		IsBase: false,
-		Order:  newOrder,
-	}
-
-	// 6. Append to module's template list in metadata
-	module.Templates = append(module.Templates, newTemplate)
-	module.LastUpdated = time.Now()
-
-	// 7. Save updated module metadata
-	if err := store.SaveModule(module); err != nil {
-		log.Fatalf("Error updating module metadata for ID %s after adding template: %v", moduleID, err)
-	}
-
-	fmt.Printf("Template '%s' added successfully and metadata updated with order %d.\n", templateName, newOrder)
-}
-
-func handlePurgeRemovedModules(store storage.DataStore) {
+// Pass ModuleManager instead of store
+func handlePurgeRemovedModules(manager *modulemanager.ModuleManager) {
 	fmt.Println("\nAttempting to purge all removed modules...")
 
-	modules, err := store.ReadAll()
+	// Confirmation prompt remains in the CLI
+	// We need to know if there *are* any modules to purge first.
+	// Let's peek using the store via the manager.
+	modules, err := manager.GetStore().ReadAll()
 	if err != nil {
-		log.Fatalf("Error reading module metadata for purge: %v", err)
+		log.Fatalf("Error reading module metadata before purge confirmation: %v", err)
 	}
-
-	removedModules := make([]*model.Module, 0)
+	removedCount := 0
 	for _, mod := range modules {
-		if !mod.IsActive { // Find inactive modules
-			removedModules = append(removedModules, mod)
+		if !mod.IsActive {
+			removedCount++
 		}
 	}
 
-	if len(removedModules) == 0 {
+	if removedCount == 0 {
 		fmt.Println("No inactive modules found. Nothing to purge.")
 		return
 	}
 
-	fmt.Printf("WARNING: You are about to permanently delete the files and metadata for %d inactive module(s).\n", len(removedModules))
-	for _, mod := range removedModules {
-		fmt.Printf("  - %s (%s) - Marked as Inactive\n", mod.Name, mod.ID)
-	}
+	fmt.Printf("WARNING: You are about to permanently delete the files and metadata for %d inactive module(s).\n", removedCount)
+	// We could list them here again if desired, but the manager logs details during the actual purge.
 	if !askForConfirmation("Are you sure you want to proceed?") {
 		fmt.Println("Operation cancelled.")
 		return
 	}
 
-	purgedCount := 0
-	failedDirDelete := 0
-	failedMetaDelete := 0
-
-	// Iterate only over the pre-filtered removed modules
-	for _, module := range removedModules {
-		fmt.Printf("Purging removed module '%s' (ID: %s)...\n", module.Name, module.ID)
-
-		// 1. Attempt to delete the directory
-		if module.Directory != "" {
-			if _, err := os.Stat(module.Directory); err == nil {
-				fmt.Printf("  Deleting directory: %s\n", module.Directory)
-				err = os.RemoveAll(module.Directory)
-				if err != nil {
-					log.Printf("  Warning: Failed to delete directory %s: %v", module.Directory, err)
-					failedDirDelete++
-				}
-			} else if !os.IsNotExist(err) {
-				// Log error if stat failed for reasons other than not existing
-				log.Printf("  Warning: Could not stat module directory %s before purge: %v", module.Directory, err)
-				failedDirDelete++
-			} else {
-				fmt.Printf("  Directory %s not found, skipping delete.\n", module.Directory)
-			}
-		}
-
-		// 2. Attempt to delete the metadata (even if directory deletion failed/skipped)
-		fmt.Printf("  Deleting metadata for ID: %s\n", module.ID)
-		err = store.DeleteModule(module.ID)
-		if err != nil {
-			log.Printf("  Error: Failed to delete metadata for module ID %s: %v", module.ID, err)
-			failedMetaDelete++
-		} else {
-			purgedCount++
-		}
-	}
-
-	fmt.Println("\nPurge complete.")
-	fmt.Printf("Successfully purged metadata for %d modules.\n", purgedCount)
-	if failedDirDelete > 0 {
-		fmt.Printf("Warning: Failed to delete directories for %d modules (check logs above).\n", failedDirDelete)
-	}
-	if failedMetaDelete > 0 {
-		fmt.Printf("Error: Failed to delete metadata for %d modules (check logs above).\n", failedMetaDelete)
-	}
-	if purgedCount == 0 && failedDirDelete == 0 && failedMetaDelete == 0 {
-		fmt.Println("No inactive modules found.")
-	}
-}
-
-// --- New: Handler function for update command ---
-func handleUpdateModule(store storage.DataStore, moduleID, newName, newSlug, newGroup, newLayout, newDesc string) { // Add new params
-	fmt.Printf("\nUpdating module ID: %s\n", moduleID)
-
-	// 1. Load the module metadata
-	module, err := store.LoadModule(moduleID)
+	// Call the manager method to perform the purge
+	purgedCount, err := manager.PurgeRemovedModules()
 	if err != nil {
-		log.Fatalf("Error loading module metadata for ID %s: %v", moduleID, err)
+		// This error is likely from the initial ReadAll inside the manager method
+		log.Fatalf("Error during purge operation: %v", err)
 	}
 
-	// 2. Update fields based on provided flags
-	updated := false
-	if newName != "" {
-		fmt.Printf("  Updating Name: %s -> %s\n", module.Name, newName)
-		module.Name = newName
-		updated = true
+	// Report summary based on manager's return value (manager logs details)
+	fmt.Println("\nPurge operation finished.")
+	fmt.Printf("Successfully purged metadata for %d modules.\n", purgedCount)
+	if purgedCount < removedCount {
+		fmt.Println("Warning: Some modules may not have been fully purged (check logs above).")
 	}
-	if newSlug != "" {
-		// Consider adding validation/sanitization for user-provided slugs here
-		fmt.Printf("  Updating Slug: %s -> %s\n", module.Slug, newSlug)
-		module.Slug = newSlug // Directly use provided slug for now
-		updated = true
-	}
-	if newGroup != "" {
-		fmt.Printf("  Updating Group: %s -> %s\n", module.Group, newGroup)
-		module.Group = newGroup
-		updated = true
-	}
-	if newLayout != "" {
-		fmt.Printf("  Updating Layout: %s -> %s\n", module.Layout, newLayout)
-		module.Layout = newLayout
-		updated = true
-	}
-	if newDesc != "" {
-		fmt.Printf("  Updating Description: %s -> %s\n", module.Description, newDesc)
-		module.Description = newDesc
-		updated = true
-	}
-
-	if !updated {
-		fmt.Println("No update flags provided, nothing to change.")
-		return // Exit if no changes were actually requested
-	}
-
-	module.LastUpdated = time.Now()
-
-	// 3. Save updated module metadata (Ensure this runs if updated is true)
-	if err := store.SaveModule(module); err != nil {
-		log.Fatalf("Error saving updated module metadata for ID %s: %v", moduleID, err)
-	}
-
-	fmt.Printf("Successfully updated module metadata for ID %s.\n", moduleID)
 }
+
+// func handleUpdateModule(store storage.DataStore, moduleID, newName, newSlug, newGroup, newLayout, newDesc string) {
+// 	// --- This logic is now moved to internal/modulemanager/manager.go ---
+// }
