@@ -8,14 +8,16 @@ import (
 	"path/filepath" // Added for joining paths
 
 	// Added for module type
+	"go-module-builder/internal/modulemanager"
 	"go-module-builder/internal/storage" // Added for storage interface
 )
 
 // adminApplication holds the application-wide dependencies for the admin server.
 type adminApplication struct {
-	logger      *slog.Logger
-	moduleStore storage.DataStore // Corrected interface name
-	projectRoot string            // Added project root
+	logger        *slog.Logger
+	moduleStore   storage.DataStore            // Corrected interface name
+	projectRoot   string                       // Added project root
+	moduleManager *modulemanager.ModuleManager // Added module manager field
 }
 
 func main() {
@@ -48,11 +50,17 @@ func main() {
 		}
 	}
 
+	// Initialize Module Manager
+	// Note: Using the same modules directory as the CLI/Server for now.
+	modulesDir := filepath.Join(projRoot, "modules")                         // Define modules dir path
+	manager := modulemanager.NewManager(store, logger, projRoot, modulesDir) // Use same logger for now
+
 	// --- Initialize Application Struct ---
 	app := &adminApplication{
-		logger:      logger,
-		moduleStore: store, // Assign the initialized store
-		projectRoot: projRoot,
+		logger:        logger,
+		moduleStore:   store, // Assign the initialized store
+		projectRoot:   projRoot,
+		moduleManager: manager, // Assign the initialized manager
 	}
 
 	// --- Configuration (Placeholder) ---

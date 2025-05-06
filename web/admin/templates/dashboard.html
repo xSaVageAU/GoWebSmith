@@ -34,9 +34,16 @@
                     <td>{{ if .IsActive }}Active{{ else }}Inactive{{ end }}</td>
                     <td>{{ len .Templates }}</td>
                     <td>
-                        <!-- Action buttons will go here later -->
-                        <button disabled>Edit Code</button>
-                        <button disabled>Delete</button>
+                        <!-- Edit Code Link -->
+                        <a href="/admin/modules/edit/{{ .ID }}" role="button" style="margin-right: 5px;">Edit Code</a>
+
+                        <!-- Delete Form/Button -->
+                        <form action="/admin/modules/delete/{{ .ID }}" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to soft-delete module \'{{ .Name }}\' (ID: {{ .ID }})?');">
+                            {{/* TODO: Add CSRF token later */}}
+                            <input type="hidden" name="force" value="false"> {{/* Default to soft delete */}}
+                            <button type="submit">Delete</button>
+                        </form>
+                        {{/* TODO: Add Force Delete button later */}}
                     </td>
                 </tr>
                 {{ end }}
@@ -47,7 +54,7 @@
 
 <!-- Add other dashboard elements later -->
 <p style="margin-top: 1em;">
-    <button disabled>Create New Module</button>
+    <a href="/admin/modules/new" role="button">Create New Module</a>
 </p>
 
 {{ end }}
