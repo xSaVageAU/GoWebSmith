@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url" // Added for URL encoding error messages
 	"os"
 	"path/filepath"
 	"regexp" // Added for slug validation
@@ -89,8 +90,12 @@ func (app *adminApplication) moduleCreateFormHandler(w http.ResponseWriter, r *h
 	// Add any page-specific data if needed. For this form, CurrentYear for the layout is important.
 	// The layout.html expects .CurrentYear directly for the footer.
 	// If newTemplateData doesn't set it, we ensure it's available.
-	// Or, we can pass a simple struct for PageData if the form needs specific fields later.
 	data["CurrentYear"] = time.Now().Year() // Ensure CurrentYear is available for layout
+
+	// Data for pre-filling the form and displaying errors
+	data["FormError"] = r.URL.Query().Get("error")
+	data["ModuleName"] = r.URL.Query().Get("moduleName")
+	data["CustomSlug"] = r.URL.Query().Get("customSlug")
 
 	// Execute the layout template (which includes module_form.html content)
 	err := ts.ExecuteTemplate(w, "layout.html", data)
@@ -115,8 +120,13 @@ func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.
 
 	// Basic validation
 	if moduleName == "" {
-		// TODO: Improve error handling - show error on form instead of plain text
-		http.Error(w, "Module Name is required", http.StatusBadRequest)
+		errorMsg := "Module Name is required."
+		// Redirect back to the form with error message and original values
+		redirectURL := fmt.Sprintf("/admin/modules/new?error=%s&moduleName=%s&customSlug=%s",
+			url.QueryEscape(errorMsg),
+			url.QueryEscape(moduleName), // will be empty but good to keep consistent
+			url.QueryEscape(customSlug))
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
 
@@ -126,10 +136,14 @@ func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.
 		// This regex is similar to the HTML pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
 		isValidSlug, _ := regexp.MatchString(`^[a-z0-9]+(?:-[a-z0-9]+)*$`, customSlug)
 		if !isValidSlug {
-			// TODO: Improve error handling - show error on form instead of plain text
-			// For now, just return a bad request. We might want to pass the error back to the form.
 			app.logger.Warn("Invalid custom slug format provided", "customSlug", customSlug)
-			http.Error(w, "Invalid Custom Slug format. Use lowercase letters, numbers, and hyphens. Must start and end with a letter or number.", http.StatusBadRequest)
+			errorMsg := "Invalid Custom Slug format. Use lowercase letters, numbers, and hyphens. Must start and end with a letter or number."
+			// Redirect back to the form with error message and original values
+			redirectURL := fmt.Sprintf("/admin/modules/new?error=%s&moduleName=%s&customSlug=%s",
+				url.QueryEscape(errorMsg),
+				url.QueryEscape(moduleName),
+				url.QueryEscape(customSlug))
+			http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 			return
 		}
 	}

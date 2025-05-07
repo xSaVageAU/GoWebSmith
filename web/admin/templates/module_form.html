@@ -1,19 +1,23 @@
 {{ define "content" }}
 <h2>Create New Module</h2>
 
-{{/* TODO: Add form error display later */}}
+{{ if .FormError }}
+<p class="text-error" style="padding: 0.5em; border: 1px solid red; background-color: #ffebeb;">
+    <strong>Error:</strong> {{ .FormError }}
+</p>
+{{ end }}
 
 <form action="/admin/modules/new" method="POST">
 	<input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
 	<div>
-        <label for="moduleName">Module Name:</label><br>
-        <input type="text" id="moduleName" name="moduleName" required size="50">
-    </div>
-    <br>
-    <div>
-        <label for="customSlug">Custom URL Slug (Optional):</label><br>
-        <input type="text" id="customSlug" name="customSlug" size="50" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens only (e.g., my-cool-module)">
-        <small>If left blank, a UUID will be used. Use lowercase letters, numbers, and hyphens.</small>
+		<label for="moduleName">Module Name:</label><br>
+		<input type="text" id="moduleName" name="moduleName" value="{{ .ModuleName }}" required size="50">
+	</div>
+	<br>
+	<div>
+		<label for="customSlug">Custom URL Slug (Optional):</label><br>
+		<input type="text" id="customSlug" name="customSlug" value="{{ .CustomSlug }}" size="50" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens only (e.g., my-cool-module)">
+		<small>If left blank, a UUID will be used. Use lowercase letters, numbers, and hyphens.</small>
     </div>
     <br>
     <div>
