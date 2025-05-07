@@ -465,7 +465,7 @@ func (app *adminApplication) modulePreviewHandler(w http.ResponseWriter, r *http
 			entryPointTemplateName = "page" // base.html defines "page"
 			app.logger.Debug("Attempting to execute 'page' template for base.html preview", "filename", reqData.Filename)
 
-			renderedSubContent, subRenderErr := app.renderAdminPreviewSubTemplates(previewTmplSet, module, reqData.Filename, reqData.Content)
+			renderedSubContent, subRenderErr := app.renderAdminPreviewSubTemplates(previewTmplSet, module)
 			if subRenderErr != nil {
 				renderErr = fmt.Errorf("failed to render sub-templates for page preview: %w", subRenderErr)
 			} else {
@@ -517,8 +517,8 @@ func (app *adminApplication) modulePreviewHandler(w http.ResponseWriter, r *http
 }
 
 // renderAdminPreviewSubTemplates renders the non-base HTML/TMPL templates for a module in their specified order.
-// It uses an already parsed template set and considers the currently edited file's modified content.
-func (app *adminApplication) renderAdminPreviewSubTemplates(previewTmplSet *template.Template, module *model.Module, editingFilename string, editingContent string) (string, error) {
+// It uses an already parsed template set.
+func (app *adminApplication) renderAdminPreviewSubTemplates(previewTmplSet *template.Template, module *model.Module) (string, error) {
 	var subTemplatesToRender []model.Template
 	for _, tmplMeta := range module.Templates {
 		if !tmplMeta.IsBase && tmplMeta.Name != "base.html" && (strings.HasSuffix(tmplMeta.Name, ".html") || strings.HasSuffix(tmplMeta.Name, ".tmpl")) {
@@ -638,14 +638,4 @@ func (app *adminApplication) saveModuleTemplateContentHandler(w http.ResponseWri
 	app.logger.Info("Successfully saved template file", "moduleID", moduleID, "filename", filename, "path", templateFilePath)
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "File %s saved successfully.", filename)
-}
-
-// Helper function to get working directory (can be moved later)
-func getProjectRoot() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	// Assuming the executable is run from the project root
-	return wd, nil
 }
