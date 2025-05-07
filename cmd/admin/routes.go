@@ -44,7 +44,15 @@ func (app *adminApplication) routes() http.Handler {
 	r.Use(middleware.Timeout(60 * time.Second)) // Keep timeout
 
 	// --- Static file server ---
-	// TODO: Add static file server for web/admin/static later
+	staticPath := filepath.Join(app.projectRoot, "web", "admin", "static")
+	app.logger.Info("Serving static files", "path", staticPath, "url_prefix", "/static")
+
+	// Serve static files
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.StripSlashes) // Optional: helps with trailing slashes
+		fs := http.FileServer(http.Dir(staticPath))
+		r.Handle("/static/*", http.StripPrefix("/static/", fs))
+	})
 
 	// --- Handlers ---
 	r.Get("/", app.dashboardHandler)

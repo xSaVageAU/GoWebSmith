@@ -1,13 +1,17 @@
+{{ define "extra_css" }}
+    <link rel="stylesheet" href="/static/css/admin-editor.css">
+{{ end }}
+
 {{ define "content" }}
 {{/* .Data here will be the *model.Module from the handler */}}
 <h2>Editing Module: {{ .Data.Name }} ({{ .Data.ID }})</h2>
 
-<div style="display: flex; gap: 1em; margin-top: 1em; height: calc(100vh - 200px);"> {{/* Basic height */}}
+<div class="editor-layout" data-module-id="{{ .Data.ID }}">
 
     {{/* File List Pane */}}
-    <div style="flex: 0 0 250px; border-right: 1px solid #ccc; padding-right: 1em; overflow-y: auto;">
+    <div class="file-list-pane">
         <h4>Templates</h4>
-        <ul id="template-file-list" style="list-style: none; padding: 0; margin: 0;">
+        <ul id="template-file-list">
             {{ range .Data.Templates }}
             <li>
                 <button class="file-button" data-filename="{{ .Name }}">
@@ -22,164 +26,28 @@
     </div>
 
     {{/* Editor Pane */}}
-    <div style="flex: 2; display: flex; flex-direction: column;">
-        <h4>Editor: <span id="current-filename" style="font-weight: normal;">No file selected</span></h4>
-        <textarea id="editor-content" style="width: 98%; flex-grow: 1; font-family: monospace; margin-bottom: 0.5em;"
+    <div class="editor-pane">
+        <h4>Editor: <span id="current-filename">No file selected</span></h4>
+        <textarea id="editor-content"
             placeholder="Select a file from the left to edit..."
             readonly
         ></textarea>
         <div>
             <button id="save-changes-button" disabled>Save Changes</button>
-            <span id="save-status" style="margin-left: 10px;"></span>
+            <span id="save-status"></span>
             {{/* TODO: Add Save Draft button later */}}
         </div>
     </div>
 
     {{/* Preview Pane */}}
-    <div style="flex: 3; border: 1px solid #eee; padding: 0.5em; background-color: #fdfdfd; overflow: auto;">
+    <div class="preview-pane-container">
         <h4>Live Preview</h4>
-        <div id="preview-pane" style="width: 100%; height: 100%; border: none;">
+        <div id="preview-pane">
             Select a file and start editing to see preview...
         </div>
     </div>
 
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const editorTextarea = document.getElementById('editor-content');
-    const currentFilenameSpan = document.getElementById('current-filename');
-    const previewPane = document.getElementById('preview-pane');
-    const saveChangesButton = document.getElementById('save-changes-button');
-    const saveStatusSpan = document.getElementById('save-status'); // Moved inside DOMContentLoaded
-    let currentEditingFile = null;
-    let currentModuleID = "{{ .Data.ID }}"; // Get module ID from Go template
-
-    document.querySelectorAll('.file-button').forEach(button => {
-        button.addEventListener('click', async function() {
-            const filename = this.dataset.filename;
-            currentEditingFile = filename;
-            currentFilenameSpan.textContent = filename;
-            editorTextarea.value = 'Loading...';
-            editorTextarea.readOnly = true;
-            saveChangesButton.disabled = true;
-
-            try {
-                const response = await fetch(`/api/admin/modules/${currentModuleID}/templates/${filename}`);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch template: ${response.status} ${response.statusText}`);
-                }
-                const content = await response.text();
-                editorTextarea.value = content;
-                editorTextarea.readOnly = false;
-                saveChangesButton.disabled = false;
-                // Trigger initial preview
-                triggerPreview();
-            } catch (error) {
-                editorTextarea.value = `Error loading file: ${error.message}`;
-                previewPane.innerHTML = `<p style="color: red;">Error loading file for preview.</p>`;
-                console.error("Error loading template:", error);
-            }
-        });
-    });
-
-    let previewTimeout;
-    editorTextarea.addEventListener('keyup', () => {
-        clearTimeout(previewTimeout);
-        previewTimeout = setTimeout(triggerPreview, 750); // Debounce
-    });
-
-    async function triggerPreview() {
-        if (!currentEditingFile) return;
-
-        const content = editorTextarea.value;
-        try {
-            const response = await fetch(`/api/admin/preview/${currentModuleID}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    filename: currentEditingFile,
-                    content: content,
-                }),
-            });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Preview failed: ${response.status} ${response.statusText} - ${errorText}`);
-            }
-            const previewHtml = await response.text();
-            // Temporarily set innerHTML directly for debugging iframe issues
-            previewPane.innerHTML = previewHtml;
-            // previewPane.innerHTML = `<iframe srcdoc="${escapeHtml(previewHtml)}" style="width:100%; height:98%; border:none;"></iframe>`;
-        } catch (error) {
-            previewPane.innerHTML = `<p style="color: red;">Preview error: ${error.message}</p>`;
-            console.error("Error triggering preview:", error);
-        }
-    }
-    
-    function escapeHtml(unsafe) {
-        return unsafe
-             .replace(/&/g, "&")
-             .replace(/</g, "<")
-             .replace(/>/g, ">")
-             .replace(/"/g, "\\\"") // Correct JavaScript string escape for double quote
-             .replace(/'/g, "&#039;"); // Keep single quote as HTML entity for consistency or use \'
-    }
-
-    // saveStatusSpan is already defined above
-
-    saveChangesButton.addEventListener('click', async () => {
-        if (!currentEditingFile || editorTextarea.readOnly) {
-            alert("No file selected or file is read-only.");
-            return;
-        }
-
-        const content = editorTextarea.value;
-        saveChangesButton.textContent = 'Saving...';
-        saveChangesButton.disabled = true;
-        saveStatusSpan.textContent = '';
-
-        try {
-            const response = await fetch(`/api/admin/modules/${currentModuleID}/templates/${currentEditingFile}`, {
-                method: 'PUT',
-                headers: {
-                    // The backend's saveModuleTemplateContentHandler reads the raw body,
-                    // so Content-Type can be text/plain or even omitted for some servers,
-                    // but text/plain is a good practice.
-                    'Content-Type': 'text/plain',
-                },
-                body: content,
-            });
-
-            const responseText = await response.text(); // Get text response for both success/error
-
-            if (!response.ok) {
-                throw new Error(`Failed to save file: ${response.status} ${response.statusText} - ${responseText}`);
-            }
-            
-            saveStatusSpan.textContent = responseText || "File saved successfully!";
-            setTimeout(() => { saveStatusSpan.textContent = ''; }, 3000); // Clear after 3s
-            
-        } catch (error) {
-            console.error("Error saving file:", error);
-            saveStatusSpan.textContent = `Error: ${error.message}`;
-        } finally {
-            saveChangesButton.textContent = 'Save Changes';
-            // Keep button enabled for retries or further saves,
-            // unless a specific workflow requires disabling it after successful save.
-            saveChangesButton.disabled = false;
-        }
-    });
-
-    // Also, in setCurrentFile, enable the save button
-    function setCurrentFile(filename) {
-        currentEditingFile = filename;
-        currentFilenameSpan.textContent = filename;
-        editorTextarea.readOnly = false; // Enable editing once file is loaded
-        saveChangesButton.disabled = false; // Enable save button
-        saveStatusSpan.textContent = ''; // Clear any previous save status
-    }
-});
-</script>
+<script src="/static/js/admin-editor.js" defer></script>
 {{ end }}
