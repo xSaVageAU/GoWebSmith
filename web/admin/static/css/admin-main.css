@@ -35,3 +35,41 @@ footer {
     text-align: center;
     margin-top: 2rem;
 }
+
+/* Styles from dashboard.html */
+#module-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1em;
+}
+
+#module-list th,
+#module-list td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+#module-list th {
+    background-color: #f2f2f2;
+}
+
+.text-error { /* For error messages */
+    color: red;
+}
+
+.action-link { /* For links like Edit Code */
+    margin-right: 5px;
+}
+
+.inline-form { /* For forms like Delete */
+    display: inline;
+}
+
+.mt-1 { /* Utility for margin-top: 1em */
+    margin-top: 1em;
+}
+
+.ml-1 { /* Utility for margin-left: 1em */
+    margin-left: 1em;
+}
