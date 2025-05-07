@@ -4,12 +4,13 @@
 
 <h3>Modules Overview</h3>
 <div id="module-list">
-    {{ if .Error }}
-        <p style="color: red;">Error: {{ .Error }}</p>
-    {{ else if not .Modules }}
-        <p>No modules found.</p>
-    {{ else }}
-        <style>
+	{{/* Accessing Page specific data via .Page */}}
+	{{ if .Page.Error }}
+		<p style="color: red;">Error: {{ .Page.Error }}</p>
+	{{ else if not .Page.Modules }}
+		<p>No modules found.</p>
+	{{ else }}
+		<style>
             table { width: 100%; border-collapse: collapse; margin-top: 1em; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
             th { background-color: #f2f2f2; }
@@ -26,21 +27,21 @@
                 </tr>
             </thead>
             <tbody>
-                {{ range .Modules }}
-                <tr>
-                    <td>{{ .ID }}</td>
-                    <td>{{ .Name }}</td>
-                    <td>{{ .Slug }}</td>
-                    <td>{{ if .IsActive }}Active{{ else }}Inactive{{ end }}</td>
-                    <td>{{ len .Templates }}</td>
+            	{{ range .Page.Modules }}
+            	<tr>
+            		<td>{{ .ID }}</td>
+            		<td>{{ .Name }}</td>
+            		<td>{{ .Slug }}</td>
+            		<td>{{ if .IsActive }}Active{{ else }}Inactive{{ end }}</td>
+            		<td>{{ len .Templates }}</td>
                     <td>
                         <!-- Edit Code Link -->
                         <a href="/admin/modules/edit/{{ .ID }}" role="button" style="margin-right: 5px;">Edit Code</a>
 
                         <!-- Delete Form/Button -->
                         <form action="/admin/modules/delete/{{ .ID }}" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to soft-delete module \'{{ .Name }}\' (ID: {{ .ID }})?');">
-                            {{/* TODO: Add CSRF token later */}}
-                            <input type="hidden" name="force" value="false"> {{/* Default to soft delete */}}
+                        	<input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                        	<input type="hidden" name="force" value="false"> {{/* Default to soft delete */}}
                             <button type="submit">Delete</button>
                         </form>
                         {{/* TODO: Add Force Delete button later */}}

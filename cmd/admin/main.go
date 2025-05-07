@@ -11,6 +11,8 @@ import (
 	// Added for module type
 	"go-module-builder/internal/modulemanager"
 	"go-module-builder/internal/storage" // Added for storage interface
+
+	"github.com/justinas/nosurf" // Added for CSRF token in template data
 )
 
 // adminApplication holds the application-wide dependencies for the admin server.
@@ -20,6 +22,17 @@ type adminApplication struct {
 	projectRoot   string                        // Added project root
 	moduleManager *modulemanager.ModuleManager  // Added module manager field
 	templateCache map[string]*template.Template // Added for template caching
+}
+
+// newTemplateData creates a map of data to pass to templates, including CSRF token.
+func (app *adminApplication) newTemplateData(r *http.Request) map[string]any {
+	// Create a base map.
+	data := map[string]any{
+		"CSRFToken": nosurf.Token(r),
+		// "CurrentYear": time.Now().Year(), // Could be added here if not page-specific
+		// Add other common data here, e.g., flash messages, authentication status
+	}
+	return data
 }
 
 func newTemplateCache(projectRoot string) (map[string]*template.Template, error) {

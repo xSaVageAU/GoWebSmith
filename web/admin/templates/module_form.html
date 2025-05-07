@@ -4,7 +4,8 @@
 {{/* TODO: Add form error display later */}}
 
 <form action="/admin/modules/new" method="POST">
-    <div>
+	<input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+	<div>
         <label for="moduleName">Module Name:</label><br>
         <input type="text" id="moduleName" name="moduleName" required size="50">
     </div>

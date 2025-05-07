@@ -7,7 +7,27 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware" // Import middleware
+	"github.com/justinas/nosurf"          // Added for CSRF protection
 )
+
+func noSurfMiddleware(next http.Handler) http.Handler {
+	csrfHandler := nosurf.New(next)
+	// TODO: Set HttpOnly, Secure, and Path attributes for the cookie in a production environment.
+	// For example, for production:
+	// csrfHandler.SetBaseCookie(http.Cookie{
+	// 	HttpOnly: true,
+	// 	Path:     "/",
+	// 	Secure:   true, // Assuming HTTPS in production
+	// 	SameSite: http.SameSiteLaxMode,
+	// })
+
+	// Exempt the API preview path as it's an AJAX JSON request not a traditional form post
+	// and doesn't need CSRF protection in the same way.
+	// Alternatively, ensure frontend sends X-CSRF-Token header for JSON APIs if not exempting.
+	csrfHandler.ExemptGlob("/api/admin/preview/*")
+
+	return csrfHandler
+}
 
 // routes sets up the HTTP router for the admin application.
 func (app *adminApplication) routes() http.Handler {
@@ -19,6 +39,7 @@ func (app *adminApplication) routes() http.Handler {
 	r.Use(middleware.Logger) // Chi's built-in logger
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second)) // Keep timeout
+	r.Use(noSurfMiddleware)                     // Add CSRF protection middleware
 
 	// --- Static file server ---
 	staticPath := filepath.Join(app.projectRoot, "web", "admin", "static")

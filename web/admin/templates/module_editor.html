@@ -3,16 +3,16 @@
 {{ end }}
 
 {{ define "content" }}
-{{/* .Data here will be the *model.Module from the handler */}}
-<h2>Editing Module: {{ .Data.Name }} ({{ .Data.ID }})</h2>
+{{/* .ModuleData here will be the *model.Module from the handler */}}
+<h2>Editing Module: {{ .ModuleData.Name }} ({{ .ModuleData.ID }})</h2>
 
-<div class="editor-layout" data-module-id="{{ .Data.ID }}">
+<div class="editor-layout" data-module-id="{{ .ModuleData.ID }}">
 
     {{/* File List Pane */}}
     <div class="file-list-pane">
         <h4>Templates</h4>
         <ul id="template-file-list">
-            {{ range .Data.Templates }}
+            {{ range .ModuleData.Templates }}
             <li>
                 <button class="file-button" data-filename="{{ .Name }}">
                     {{ .Name }}

@@ -33,28 +33,28 @@ type PreviewRequestData struct {
 
 // dashboardHandler serves the main admin dashboard page.
 func (app *adminApplication) dashboardHandler(w http.ResponseWriter, r *http.Request) {
-	// Initialize pageData with CurrentYear
+	data := app.newTemplateData(r) // Base data including CSRFToken
+
+	// Page-specific data structure
 	pageData := DashboardPageData{
 		CurrentYear: time.Now().Year(),
 		Modules:     make([]*model.Module, 0),
 	}
 
-	// Check if store was initialized correctly
 	if app.moduleStore == nil {
 		app.logger.Warn("Module store is not initialized in dashboard handler")
 		pageData.Error = "Module storage not available."
 	} else {
-		// Fetch modules from the store
 		modules, err := app.moduleStore.ReadAll()
 		if err != nil {
 			app.logger.Error("Failed to read modules from store", "error", err)
-			// Don't send 500, just show error on dashboard
 			pageData.Error = "Failed to load module list."
 		} else {
 			pageData.Modules = modules
 			app.logger.Debug("Loaded modules for dashboard", "count", len(modules))
 		}
 	}
+	data["Page"] = pageData // Embed page-specific data under "Page" key
 
 	// Retrieve the dashboard template from cache
 	ts, ok := app.templateCache["dashboard.html"]
@@ -65,7 +65,7 @@ func (app *adminApplication) dashboardHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	// Execute the layout template (which includes dashboard.html content)
-	err := ts.ExecuteTemplate(w, "layout.html", pageData)
+	err := ts.ExecuteTemplate(w, "layout.html", data)
 	if err != nil {
 		app.logger.Error("Error executing admin layout template", "error", err)
 		// Avoid writing header again if already sent
@@ -83,13 +83,16 @@ func (app *adminApplication) moduleCreateFormHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Prepare data (just the year for the layout for now)
-	templateData := DashboardPageData{ // Reusing DashboardPageData for simplicity, might need dedicated struct later
-		CurrentYear: time.Now().Year(),
-	}
+	// Prepare data
+	data := app.newTemplateData(r)
+	// Add any page-specific data if needed. For this form, CurrentYear for the layout is important.
+	// The layout.html expects .CurrentYear directly for the footer.
+	// If newTemplateData doesn't set it, we ensure it's available.
+	// Or, we can pass a simple struct for PageData if the form needs specific fields later.
+	data["CurrentYear"] = time.Now().Year() // Ensure CurrentYear is available for layout
 
 	// Execute the layout template (which includes module_form.html content)
-	err := ts.ExecuteTemplate(w, "layout.html", templateData)
+	err := ts.ExecuteTemplate(w, "layout.html", data)
 	if err != nil {
 		app.logger.Error("Error executing admin create form layout template", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -221,13 +224,12 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 	}
 
 	// Prepare data for the template
-	templateData := map[string]any{
-		"CurrentYear": time.Now().Year(), // For layout
-		"Data":        module,            // Pass the *model.Module object
-	}
+	data := app.newTemplateData(r)
+	data["CurrentYear"] = time.Now().Year() // For layout compatibility
+	data["ModuleData"] = module             // Pass the *model.Module object, using a more specific key
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	err = ts.ExecuteTemplate(w, "layout.html", templateData) // layout.html is the entry point for cached templates
+	err = ts.ExecuteTemplate(w, "layout.html", data) // layout.html is the entry point for cached templates
 	if err != nil {
 		app.logger.Error("Error executing admin editor layout template", "error", err, "moduleID", moduleID)
 		// Avoid writing header again if already sent
@@ -303,19 +305,19 @@ func (app *adminApplication) getModuleTemplateContentHandler(w http.ResponseWrit
 func (app *adminApplication) modulePreviewHandler(w http.ResponseWriter, r *http.Request) {
 	moduleID := chi.URLParam(r, "moduleID")
 	if moduleID == "" {
-		app.logger.Error("Module ID missing from URL in preview request")
+		app.logger.Error("modulePreviewHandler: Module ID missing from URL in preview request")
 		http.Error(w, "Bad Request - Missing Module ID", http.StatusBadRequest)
 		return
 	}
 
 	var reqData PreviewRequestData
 	if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
-		app.logger.Error("Error decoding preview request body", "error", err, "moduleID", moduleID)
+		app.logger.Error("modulePreviewHandler: Error decoding preview request body", "error", err, "moduleID", moduleID)
 		http.Error(w, "Bad Request - Invalid JSON", http.StatusBadRequest)
 		return
 	}
 	if reqData.Filename == "" {
-		app.logger.Error("Filename missing in preview request body", "moduleID", moduleID)
+		app.logger.Error("modulePreviewHandler: Filename missing in preview request body", "moduleID", moduleID)
 		http.Error(w, "Bad Request - Missing filename", http.StatusBadRequest)
 		return
 	}
