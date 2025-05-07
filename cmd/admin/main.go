@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html/template" // Added for template cache
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,9 +16,46 @@ import (
 // adminApplication holds the application-wide dependencies for the admin server.
 type adminApplication struct {
 	logger        *slog.Logger
-	moduleStore   storage.DataStore            // Corrected interface name
-	projectRoot   string                       // Added project root
-	moduleManager *modulemanager.ModuleManager // Added module manager field
+	moduleStore   storage.DataStore             // Corrected interface name
+	projectRoot   string                        // Added project root
+	moduleManager *modulemanager.ModuleManager  // Added module manager field
+	templateCache map[string]*template.Template // Added for template caching
+}
+
+func newTemplateCache(projectRoot string) (map[string]*template.Template, error) {
+	cache := map[string]*template.Template{}
+
+	// Define pages that use the layout.html as a base
+	// and define their own "content" block.
+	pages := []string{
+		"dashboard.html",
+		"module_form.html",
+		"module_editor.html",
+	}
+
+	// Path to the admin templates directory
+	adminTemplatesDir := filepath.Join(projectRoot, "web", "admin", "templates")
+
+	for _, page := range pages {
+		name := page // Use the filename as the key in the cache
+
+		// Create a new template set.
+		// Add any functions if you have them (e.g., .Funcs(functions))
+		// Parse the base layout template first.
+		ts, err := template.ParseFiles(filepath.Join(adminTemplatesDir, "layout.html"))
+		if err != nil {
+			return nil, fmt.Errorf("error parsing layout template: %w", err)
+		}
+
+		// Parse the specific page template, adding it to the set.
+		// The page template should define blocks that layout.html expects (e.g., "content", "extra_css").
+		ts, err = ts.ParseFiles(filepath.Join(adminTemplatesDir, page))
+		if err != nil {
+			return nil, fmt.Errorf("error parsing page template %s: %w", page, err)
+		}
+		cache[name] = ts
+	}
+	return cache, nil
 }
 
 func main() {
@@ -56,11 +94,20 @@ func main() {
 	manager := modulemanager.NewManager(store, logger, projRoot, modulesDir) // Use same logger for now
 
 	// --- Initialize Application Struct ---
+	// Initialize Template Cache
+	templateCache, err := newTemplateCache(projRoot)
+	if err != nil {
+		logger.Error("Failed to create template cache", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("Admin UI templates cached successfully")
+
 	app := &adminApplication{
 		logger:        logger,
 		moduleStore:   store, // Assign the initialized store
 		projectRoot:   projRoot,
-		moduleManager: manager, // Assign the initialized manager
+		moduleManager: manager,       // Assign the initialized manager
+		templateCache: templateCache, // Assign the initialized cache
 	}
 
 	// --- Configuration (Placeholder) ---
