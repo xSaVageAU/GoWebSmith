@@ -24,11 +24,12 @@ type adminApplication struct {
 	templateCache map[string]*template.Template // Added for template caching
 }
 
-// newTemplateData creates a map of data to pass to templates, including CSRF token.
-func (app *adminApplication) newTemplateData(r *http.Request) map[string]any {
+// newTemplateData creates a map of data to pass to templates, including CSRF token and active nav item.
+func (app *adminApplication) newTemplateData(r *http.Request, activeNav string) map[string]any {
 	// Create a base map.
 	data := map[string]any{
 		"CSRFToken": nosurf.Token(r),
+		"ActiveNav": activeNav, // Identifier for the current active navigation tab
 		// "CurrentYear": time.Now().Year(), // Could be added here if not page-specific
 		// Add other common data here, e.g., flash messages, authentication status
 	}

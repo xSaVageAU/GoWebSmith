@@ -35,7 +35,7 @@ type PreviewRequestData struct {
 
 // dashboardHandler serves the main admin dashboard page.
 func (app *adminApplication) dashboardHandler(w http.ResponseWriter, r *http.Request) {
-	data := app.newTemplateData(r) // Base data including CSRFToken
+	data := app.newTemplateData(r, "dashboard") // Set active nav to "dashboard"
 
 	// Page-specific data structure
 	pageData := DashboardPageData{
@@ -86,7 +86,7 @@ func (app *adminApplication) moduleCreateFormHandler(w http.ResponseWriter, r *h
 	}
 
 	// Prepare data
-	data := app.newTemplateData(r)
+	data := app.newTemplateData(r, "create") // Set active nav to "create"
 	// Add any page-specific data if needed. For this form, CurrentYear for the layout is important.
 	// The layout.html expects .CurrentYear directly for the footer.
 	// If newTemplateData doesn't set it, we ensure it's available.
@@ -252,7 +252,8 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 	}
 
 	// Prepare data for the template
-	data := app.newTemplateData(r)
+	// Note: There isn't a specific nav item for "edit", but we pass it for potential future use or context.
+	data := app.newTemplateData(r, "edit")
 	data["CurrentYear"] = time.Now().Year() // For layout compatibility
 	data["ModuleData"] = module             // Pass the *model.Module object, using a more specific key
 

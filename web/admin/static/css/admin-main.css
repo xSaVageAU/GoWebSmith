@@ -1,61 +1,251 @@
+/* Mockup Inspired Theme Variables */
+:root {
+    /* Dark theme variables from mockup */
+    --primary: #8b5cf6;         /* Purple */
+    --primary-hover: #a78bfa;   /* Lighter Purple */
+    --secondary: #22d3ee;       /* Cyan/Turquoise */
+    --bg-dark: #171a23;         /* Main Background */
+    --bg-glass: rgba(30, 34, 45, 0.65); /* Semi-transparent layer */
+    --bg-glass-border: rgba(255,255,255,0.13);
+    --text-light: #f4f4fa;      /* Main Text */
+    --text-secondary: #a1a1aa;  /* Dimmer Text */
+    --text-muted: #6e7282;      /* Dimmest Text */
+    --border-color: rgba(200,200,255,0.07); /* Subtle Border */
+    
+    /* Additional useful colors (can be adjusted) */
+    --red: #f43f5e; /* Example red for errors */
+    --green: #10b981; /* Example green for success */
+
+    /* Shadows and effects */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 8px 32px 0 rgba(0,0,0,0.20);
+    --border-radius: 14px; /* Using mockup's border radius */
+    
+    /* Gradients */
+    --gradient-accent: linear-gradient(90deg, #8b5cf6 0%, #22d3ee 100%);
+}
+
+/* Global Box Sizing */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+
+html {
+    height: 100%;
+    background-color: var(--bg-dark);
+}
+
+/* Base body styles */
 body {
-    font-family: sans-serif;
-    margin: 0;
+	font-family: 'Poppins', sans-serif; /* Using Poppins from mockup */
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	min-height: 100%;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    line-height: 1.5; /* Using mockup's line-height */
 }
 
-header {
-    background-color: #333;
-    color: white;
-    padding: 1rem;
+/* General typography */
+body, input, select, textarea, button {
+    font-family: 'Poppins', sans-serif;
 }
 
-nav {
-    background-color: #f4f4f4;
-    padding: 1rem;
+/* Scrollbar styling from mockup */
+::-webkit-scrollbar {
+    width: 10px;
+    background: rgba(30, 34, 45, 0.3); /* Using a color derived from --bg-glass */
+}
+::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 8px;
+    opacity: 0.4; /* Opacity might not work as expected here, but keeping for reference */
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-hover);
 }
 
-nav ul {
+
+/* Base link styling from mockup */
+a {
+    color: var(--secondary); /* Cyan */
+    text-decoration: none;
+    transition: color 0.15s;
+}
+a:hover, a:focus {
+    color: var(--primary); /* Purple */
+    text-decoration: underline;
+}
+
+
+/* --- Header & Navigation Styles (Adapted from mockup/header.css) --- */
+
+.top-header {
+    background: var(--bg-glass);
+    backdrop-filter: blur(14px) saturate(110%); /* Corresponds to --mica-blur */
+    -webkit-backdrop-filter: blur(14px) saturate(110%); /* For Safari */
+    border-bottom: 1.5px solid var(--bg-glass-border);
+    box-shadow: var(--shadow-md);
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky; /* Make header sticky */
+    top: 0;
+    z-index: 1000; /* Ensure it's above other content */
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+}
+
+.logo i {
+    font-size: 1.75rem; /* Ensure Bootstrap Icons are linked in HTML */
+    color: var(--primary);
+    margin-right: 0.75rem;
+}
+
+.logo h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--primary); /* Fallback if gradient doesn't work */
+    background: var(--gradient-accent);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0; /* Reset from default h1 margin */
+}
+
+.header-controls { /* Placeholder for future icons/buttons */
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+
+.tab-nav {
+    background: var(--bg-glass);
+    backdrop-filter: blur(14px) saturate(110%);
+    -webkit-backdrop-filter: blur(14px) saturate(110%);
+    border-bottom: 1.5px solid var(--bg-glass-border);
+    box-shadow: var(--shadow-sm); /* Lighter shadow for nav */
+    padding: 0 2rem; /* Padding only left/right */
+    position: sticky;
+    top: 75px; /* Adjusted to match computed header height */
+    z-index: 999; /* Below top-header */
+   }
+
+.tab-nav ul {
+    display: flex;
     list-style: none;
-    padding: 0;
+    gap: 0.5rem; /* Reduced gap for closer tabs */
     margin: 0;
+    padding: 0; /* Remove default ul padding */
 }
 
-nav ul li {
-    display: inline;
-    margin-right: 1rem;
+.tab-nav li { /* Styling for the li element itself for background changes */
+    padding: 0; /* Padding will be on the 'a' tag */
+    position: relative;
+    transition: background 0.2s; /* Smooth transition for hover on li */
 }
 
+.tab-nav li a {
+    display: flex; /* To align icon and text */
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.9rem 1.2rem; /* Padding on the 'a' tag */
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-decoration: none; /* Ensure general 'a' rule doesn't override */
+    border-bottom: 3px solid transparent; /* For active indicator */
+    transition: color 0.2s, border-bottom-color 0.2s;
+}
+
+.tab-nav li a i {
+    font-size: 1rem; /* Icon size */
+}
+
+.tab-nav li.active a { /* Style the 'a' tag within the active 'li' */
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+.tab-nav li:not(.active) a:hover {
+    color: var(--text-light);
+    border-bottom-color: var(--overlay1);
+}
+
+
+/* --- Main Content & Footer (Existing, with minor tweaks) --- */
 main {
-    padding: 1rem;
+	padding: 1.5rem; /* Keep increased padding */
+	flex-grow: 1;
 }
 
-footer {
-    background-color: #eee;
-    padding: 1rem;
-    text-align: center;
-    margin-top: 2rem;
+/* Footer removed */
+
+h2, h3, h4 {
+    /* TODO: Update heading styles based on mockup */
+    color: var(--text-light); /* Defaulting to light text for now */
 }
+
+
+button, a[role="button"] {
+    /* TODO: Update button styles based on mockup (components.css / forms.css) */
+    background-color: var(--primary);
+    color: var(--text-light); /* Light text on primary bg */
+    border: none;
+    padding: 0.6em 1.2em;
+    border-radius: var(--border-radius); /* Use mockup border radius */
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-block;
+    text-align: center;
+    transition: background-color 0.15s;
+}
+
+button:hover, a[role="button"]:hover,
+button:focus, a[role="button"]:focus {
+	background-color: var(--primary-hover);
+}
+
 
 /* Styles from dashboard.html */
 #module-list table {
+    /* TODO: Update table styles based on mockup (dashboard.css / modules.css) */
     width: 100%;
     border-collapse: collapse;
     margin-top: 1em;
+    border: 1px solid var(--border-color);
 }
 
 #module-list th,
 #module-list td {
-    border: 1px solid #ddd;
-    padding: 8px;
+    border: 1px solid var(--border-color);
+    padding: 0.75em;
     text-align: left;
 }
 
 #module-list th {
-    background-color: #f2f2f2;
+    background-color: rgba(30, 34, 45, 0.65); /* Using bg-glass for header */
+    color: var(--text-secondary);
 }
 
 .text-error { /* For error messages */
-    color: red;
+    color: var(--red); /* Using defined red */
+    /* The inline style for background/border on module_form.html will still apply for now */
 }
 
 .action-link { /* For links like Edit Code */

@@ -3,30 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Go Module Builder - Admin</title>
+    <title>GoWebSmith - Admin</title>
+    <!-- Google Font Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Main CSS -->
     <link rel="stylesheet" href="/static/css/admin-main.css">
     {{ block "extra_css" . }}{{ end }} <!-- Block for page-specific CSS -->
-</head>
-<body>
-    <header>
-        <h1>Go Module Builder - Admin</h1>
+   </head>
+   <body>
+    <header class="top-header">
+    	<div class="logo">
+    		<i class="bi bi-boxes"></i> <!-- Icon from mockup -->
+    		<h1>GoWebSmith</h1> <!-- Updated project name -->
+    	</div>
+    	<div class="header-controls">
+    		<div class="header-actions">
+    			<!-- Placeholder for future controls like notifications, settings, user profile -->
+    		</div>
+    	</div>
     </header>
-    <nav>
-        <ul>
-            <li><a href="/">Dashboard</a></li>
-            <!-- Add other navigation links later -->
-            <!-- <li><a href="/admin/modules/new">Create Module</a></li> -->
-            <!-- <li><a href="/admin/assets">Global Assets</a></li> -->
-        </ul>
+    <nav class="tab-nav">
+    	<ul>
+    		<li {{ if eq .ActiveNav "dashboard" }}class="active"{{ end }}><a href="/"><i class="bi bi-grid-fill"></i>Dashboard</a></li>
+    		<li {{ if eq .ActiveNav "create" }}class="active"{{ end }}><a href="/admin/modules/new"><i class="bi bi-plus-square"></i>Create Module</a></li>
+    		<!-- Add other navigation links later, e.g., Assets -->
+    		<!-- <li {{ if eq .ActiveNav "assets" }}class="active"{{ end }}><a href="/admin/assets"><i class="bi bi-folder"></i>Assets</a></li> -->
+    		<!-- Note: Module Editor page doesn't have its own nav item, so it won't highlight one -->
+    	</ul>
     </nav>
     <main>
         {{ block "content" . }}
             <!-- Default content if block is not defined -->
             <p>Welcome to the Admin Interface.</p>
         {{ end }}
-    </main>
-    <footer>
-        <p>&copy; {{ .CurrentYear }} Go Module Builder</p>
-    </footer>
-</body>
+       </main>
+       <!-- Footer removed -->
+      </body>
 </html>
