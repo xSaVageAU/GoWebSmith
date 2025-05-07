@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp" // Added for slug validation
 	"sort"
 	"strings"
 	"time"
@@ -118,7 +119,20 @@ func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.
 		http.Error(w, "Module Name is required", http.StatusBadRequest)
 		return
 	}
-	// TODO: Add validation for customSlug format if provided
+
+	if customSlug != "" {
+		// Validate customSlug format: lowercase letters, numbers, and hyphens only.
+		// Must start and end with a letter or number.
+		// This regex is similar to the HTML pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+		isValidSlug, _ := regexp.MatchString(`^[a-z0-9]+(?:-[a-z0-9]+)*$`, customSlug)
+		if !isValidSlug {
+			// TODO: Improve error handling - show error on form instead of plain text
+			// For now, just return a bad request. We might want to pass the error back to the form.
+			app.logger.Warn("Invalid custom slug format provided", "customSlug", customSlug)
+			http.Error(w, "Invalid Custom Slug format. Use lowercase letters, numbers, and hyphens. Must start and end with a letter or number.", http.StatusBadRequest)
+			return
+		}
+	}
 
 	// 2. Initialize ModuleManager if not already done (should be done in main)
 	// For now, assume app.moduleManager is available and initialized
