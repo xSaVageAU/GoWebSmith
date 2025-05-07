@@ -1,0 +1,131 @@
+{{ define "content" }}
+{{/* .Data here will be the *model.Module from the handler */}}
+<h2>Editing Module: {{ .Data.Name }} ({{ .Data.ID }})</h2>
+
+<div style="display: flex; gap: 1em; margin-top: 1em; height: calc(100vh - 200px);"> {{/* Basic height */}}
+
+    {{/* File List Pane */}}
+    <div style="flex: 0 0 250px; border-right: 1px solid #ccc; padding-right: 1em; overflow-y: auto;">
+        <h4>Templates</h4>
+        <ul id="template-file-list" style="list-style: none; padding: 0; margin: 0;">
+            {{ range .Data.Templates }}
+            <li>
+                <button class="file-button" data-filename="{{ .Name }}">
+                    {{ .Name }}
+                </button>
+            </li>
+            {{ else }}
+            <li>No templates found for this module.</li>
+            {{ end }}
+        </ul>
+        {{/* TODO: Add button to add new template file? */}}
+    </div>
+
+    {{/* Editor Pane */}}
+    <div style="flex: 2; display: flex; flex-direction: column;">
+        <h4>Editor: <span id="current-filename" style="font-weight: normal;">No file selected</span></h4>
+        <textarea id="editor-content" style="width: 98%; flex-grow: 1; font-family: monospace; margin-bottom: 0.5em;"
+            placeholder="Select a file from the left to edit..."
+            readonly
+        ></textarea>
+        <div>
+            <button id="save-changes-button" disabled>Save Changes (Not Implemented)</button>
+            {{/* TODO: Add Save Draft button later */}}
+        </div>
+    </div>
+
+    {{/* Preview Pane */}}
+    <div style="flex: 3; border: 1px solid #eee; padding: 0.5em; background-color: #fdfdfd; overflow: auto;">
+        <h4>Live Preview</h4>
+        <div id="preview-pane" style="width: 100%; height: 100%; border: none;">
+            Select a file and start editing to see preview...
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const editorTextarea = document.getElementById('editor-content');
+    const currentFilenameSpan = document.getElementById('current-filename');
+    const previewPane = document.getElementById('preview-pane');
+    const saveChangesButton = document.getElementById('save-changes-button');
+    let currentEditingFile = null;
+    let currentModuleID = "{{ .Data.ID }}"; // Get module ID from Go template
+
+    document.querySelectorAll('.file-button').forEach(button => {
+        button.addEventListener('click', async function() {
+            const filename = this.dataset.filename;
+            currentEditingFile = filename;
+            currentFilenameSpan.textContent = filename;
+            editorTextarea.value = 'Loading...';
+            editorTextarea.readOnly = true;
+            saveChangesButton.disabled = true;
+
+            try {
+                const response = await fetch(`/api/admin/modules/${currentModuleID}/templates/${filename}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch template: ${response.status} ${response.statusText}`);
+                }
+                const content = await response.text();
+                editorTextarea.value = content;
+                editorTextarea.readOnly = false;
+                saveChangesButton.disabled = false;
+                // Trigger initial preview
+                triggerPreview();
+            } catch (error) {
+                editorTextarea.value = `Error loading file: ${error.message}`;
+                previewPane.innerHTML = `<p style="color: red;">Error loading file for preview.</p>`;
+                console.error("Error loading template:", error);
+            }
+        });
+    });
+
+    let previewTimeout;
+    editorTextarea.addEventListener('keyup', () => {
+        clearTimeout(previewTimeout);
+        previewTimeout = setTimeout(triggerPreview, 750); // Debounce
+    });
+
+    async function triggerPreview() {
+        if (!currentEditingFile) return;
+
+        const content = editorTextarea.value;
+        try {
+            const response = await fetch(`/api/admin/preview/${currentModuleID}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    filename: currentEditingFile,
+                    content: content,
+                }),
+            });
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Preview failed: ${response.status} ${response.statusText} - ${errorText}`);
+            }
+            const previewHtml = await response.text();
+            // Temporarily set innerHTML directly for debugging iframe issues
+            previewPane.innerHTML = previewHtml;
+            // previewPane.innerHTML = `<iframe srcdoc="${escapeHtml(previewHtml)}" style="width:100%; height:98%; border:none;"></iframe>`;
+        } catch (error) {
+            previewPane.innerHTML = `<p style="color: red;">Preview error: ${error.message}</p>`;
+            console.error("Error triggering preview:", error);
+        }
+    }
+    
+    function escapeHtml(unsafe) {
+        return unsafe
+             .replace(/&/g, "&")
+             .replace(/</g, "<")
+             .replace(/>/g, ">")
+             .replace(/"/g, "\\\"") // Correct JavaScript string escape for double quote
+             .replace(/'/g, "&#039;"); // Keep single quote as HTML entity for consistency or use \'
+    }
+
+    // TODO: Implement saveChangesButton click listener
+    // saveChangesButton.addEventListener('click', async () => { ... });
+
+</script>
+{{ end }}
