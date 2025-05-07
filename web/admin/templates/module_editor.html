@@ -29,7 +29,8 @@
             readonly
         ></textarea>
         <div>
-            <button id="save-changes-button" disabled>Save Changes (Not Implemented)</button>
+            <button id="save-changes-button" disabled>Save Changes</button>
+            <span id="save-status" style="margin-left: 10px;"></span>
             {{/* TODO: Add Save Draft button later */}}
         </div>
     </div>
@@ -45,10 +46,12 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
     const editorTextarea = document.getElementById('editor-content');
     const currentFilenameSpan = document.getElementById('current-filename');
     const previewPane = document.getElementById('preview-pane');
     const saveChangesButton = document.getElementById('save-changes-button');
+    const saveStatusSpan = document.getElementById('save-status'); // Moved inside DOMContentLoaded
     let currentEditingFile = null;
     let currentModuleID = "{{ .Data.ID }}"; // Get module ID from Go template
 
@@ -124,8 +127,59 @@
              .replace(/'/g, "&#039;"); // Keep single quote as HTML entity for consistency or use \'
     }
 
-    // TODO: Implement saveChangesButton click listener
-    // saveChangesButton.addEventListener('click', async () => { ... });
+    // saveStatusSpan is already defined above
 
+    saveChangesButton.addEventListener('click', async () => {
+        if (!currentEditingFile || editorTextarea.readOnly) {
+            alert("No file selected or file is read-only.");
+            return;
+        }
+
+        const content = editorTextarea.value;
+        saveChangesButton.textContent = 'Saving...';
+        saveChangesButton.disabled = true;
+        saveStatusSpan.textContent = '';
+
+        try {
+            const response = await fetch(`/api/admin/modules/${currentModuleID}/templates/${currentEditingFile}`, {
+                method: 'PUT',
+                headers: {
+                    // The backend's saveModuleTemplateContentHandler reads the raw body,
+                    // so Content-Type can be text/plain or even omitted for some servers,
+                    // but text/plain is a good practice.
+                    'Content-Type': 'text/plain',
+                },
+                body: content,
+            });
+
+            const responseText = await response.text(); // Get text response for both success/error
+
+            if (!response.ok) {
+                throw new Error(`Failed to save file: ${response.status} ${response.statusText} - ${responseText}`);
+            }
+            
+            saveStatusSpan.textContent = responseText || "File saved successfully!";
+            setTimeout(() => { saveStatusSpan.textContent = ''; }, 3000); // Clear after 3s
+            
+        } catch (error) {
+            console.error("Error saving file:", error);
+            saveStatusSpan.textContent = `Error: ${error.message}`;
+        } finally {
+            saveChangesButton.textContent = 'Save Changes';
+            // Keep button enabled for retries or further saves,
+            // unless a specific workflow requires disabling it after successful save.
+            saveChangesButton.disabled = false;
+        }
+    });
+
+    // Also, in setCurrentFile, enable the save button
+    function setCurrentFile(filename) {
+        currentEditingFile = filename;
+        currentFilenameSpan.textContent = filename;
+        editorTextarea.readOnly = false; // Enable editing once file is loaded
+        saveChangesButton.disabled = false; // Enable save button
+        saveStatusSpan.textContent = ''; // Clear any previous save status
+    }
+});
 </script>
 {{ end }}
