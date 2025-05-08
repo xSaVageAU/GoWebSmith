@@ -1,17 +1,26 @@
 /* Layout for the main editor view */
-.editor-layout {
+.gws-editor-layout {
     display: flex;
-    gap: 1em;
-    margin-top: 1em;
-    height: calc(100vh - 200px); /* Basic height */
+    gap: 1.5rem; /* Increased gap */
+    margin-top: 1rem;
+    height: calc(100vh - 140px); /* Adjusted height considering header/nav */
+    padding: 0 1rem; /* Add some horizontal padding to the overall layout */
 }
 
 /* File List Pane */
-.file-list-pane {
-    flex: 0 0 250px;
-    border-right: 1px solid #ccc;
-    padding-right: 1em;
+.gws-file-list-pane {
+    flex: 0 0 300px; /* Increased width like mockup */
+    background-color: var(--bg-glass);
+    border-right: 1.5px solid var(--border-color);
+    padding: 1rem;
     overflow-y: auto;
+    border-radius: var(--border-radius);
+}
+
+.gws-file-list-pane h3 { /* Assuming there's an h3 title for file list */
+    margin-top: 0; /* Remove default margin if h3 is first child */
+    margin-bottom: 1rem;
+    /* Headings will inherit style from admin-main.css */
 }
 
 #template-file-list {
@@ -20,53 +29,118 @@
     margin: 0;
 }
 
+#template-file-list li {
+    background: rgba(255, 255, 255, 0.03); /* Slightly different from pane bg */
+    border: 1px solid var(--border-color);
+    border-radius: 8px; /* Mockup's .template-item radius */
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.1s;
+    font-size: 0.875rem;
+    color: var(--text-light);
+}
+
+#template-file-list li:hover {
+    background: rgba(139, 92, 246, 0.1); /* Primary color with alpha */
+    border-color: var(--primary);
+    transform: translateY(-1px);
+}
+
+#template-file-list li.gws-active-file {
+    background-color: var(--primary);
+    color: #fff;
+    border-color: var(--primary-hover);
+    font-weight: 500;
+}
+
+
 /* Editor Pane */
-.editor-pane {
-    flex: 2;
+.gws-editor-pane {
+    flex: 2; /* Takes up 2 parts of available space */
     display: flex;
     flex-direction: column;
+    gap: 1rem; /* Space between filename/controls and textarea */
+}
+
+.gws-editor-controls { /* Container for filename and save button */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 #current-filename {
-    font-weight: normal;
+    font-weight: 600; /* Bolder filename */
+    font-size: 1.1rem;
+    color: var(--text-light);
+    /* No background/gradient here, keep it simple */
 }
 
-#editor-content {
-    width: 98%;
+#editor-content { /* The textarea */
+    width: 100%; /* Full width of its container */
     flex-grow: 1;
-    font-family: monospace;
-    margin-bottom: 0.5em;
+    font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; /* Common monospace stack */
+    margin-bottom: 0; /* Remove bottom margin, parent has gap */
+    padding: 0.75rem 1rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--border-radius);
+    font-size: 0.875rem;
+    color: var(--text-light);
+    background: rgba(40,44,56,0.93); /* Consistent with other inputs */
+    resize: none; /* Disable manual resize, rely on flex-grow */
+}
+
+#editor-content:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(139,92,246,0.2);
 }
 
 #save-status {
     margin-left: 10px;
+    font-size: 0.8rem;
+}
+#save-status.gws-success {
+    color: var(--green);
+}
+#save-status.gws-error {
+    color: var(--red);
 }
 
 /* Preview Pane */
-.preview-pane-container {
-    flex: 3;
-    border: 1px solid #eee;
-    padding: 0.5em;
-    background-color: #fdfdfd;
+.gws-preview-pane-container {
+    flex: 3; /* Takes up 3 parts of available space */
+    border: 1.5px solid var(--border-color); /* Consistent border */
+    padding: 1rem; /* Mockup's .live-preview-area padding */
+    background-color: rgba(0,0,0,0.1); /* Mockup's .live-preview-area bg */
     overflow: auto;
+    border-radius: var(--border-radius);
+    display: flex; /* To make #preview-pane fill it */
 }
 
 #preview-pane { /* This is the inner div where content is injected */
     width: 100%;
     height: 100%;
     border: none;
+    background-color: #fff; /* Typically previews are on a white background unless it's a CSS file */
+    color: #333; /* Default text color for preview content */
 }
 
 /* Styles for dynamically generated error messages in preview */
-#preview-pane p[style*="color: red"],
-.preview-error { /* A class to add via JS for better targeting */
-    color: red;
+#preview-pane .gws-preview-error, /* Target class for JS-added errors */
+#preview-pane p[data-preview-error="true"] /* More specific selector for errors */
+{
+    color: var(--red);
+    background-color: rgba(255,0,0,0.05);
+    padding: 0.5em;
+    border: 1px dashed var(--red);
     font-family: monospace;
+    white-space: pre-wrap; /* Preserve error formatting */
 }
 
 /* If an iframe is used for preview (from commented out code) */
 #preview-pane iframe {
     width: 100%;
-    height: 98%;
+    height: 100%; /* Fill the container */
     border: none;
 }

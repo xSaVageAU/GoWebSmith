@@ -6,10 +6,10 @@
 {{/* .ModuleData here will be the *model.Module from the handler */}}
 <h2>Editing Module: {{ .ModuleData.Name }} ({{ .ModuleData.ID }})</h2>
 
-<div class="editor-layout" data-module-id="{{ .ModuleData.ID }}">
+<div class="gws-editor-layout" data-module-id="{{ .ModuleData.ID }}">
 
     {{/* File List Pane */}}
-    <div class="file-list-pane">
+    <div class="gws-file-list-pane">
         <h4>Templates</h4>
         <ul id="template-file-list">
             {{ range .ModuleData.Templates }}
@@ -26,21 +26,23 @@
     </div>
 
     {{/* Editor Pane */}}
-    <div class="editor-pane">
-        <h4>Editor: <span id="current-filename">No file selected</span></h4>
+    <div class="gws-editor-pane">
+        <div class="gws-editor-controls"> <!-- Added this wrapper -->
+            <h4>Editor: <span id="current-filename">No file selected</span></h4>
+            <div> <!-- Wrapper for button and status -->
+                <button id="save-changes-button" disabled>Save Changes</button>
+                <span id="save-status"></span>
+            </div>
+        </div>
         <textarea id="editor-content"
             placeholder="Select a file from the left to edit..."
             readonly
         ></textarea>
-        <div>
-            <button id="save-changes-button" disabled>Save Changes</button>
-            <span id="save-status"></span>
-            {{/* TODO: Add Save Draft button later */}}
-        </div>
+    {{/* Removed the extra div that was here previously */}}
     </div>
 
     {{/* Preview Pane */}}
-    <div class="preview-pane-container">
+    <div class="gws-preview-pane-container">
         <h4>Live Preview</h4>
         <div id="preview-pane">
             Select a file and start editing to see preview...

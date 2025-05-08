@@ -2,27 +2,29 @@
 <h2>Create New Module</h2>
 
 {{ if .FormError }}
-<p class="text-error" style="padding: 0.5em; border: 1px solid red; background-color: #ffebeb;">
-    <strong>Error:</strong> {{ .FormError }}
-</p>
+<div class="gws-form-group"> <!-- Added for consistency, though error is outside form group usually -->
+    <p class="gws-text-error" style="padding: 0.5em; border: 1px solid var(--red); background-color: rgba(244,63,94,0.1);">
+        <strong>Error:</strong> {{ .FormError }}
+    </p>
+</div>
 {{ end }}
 
 <form action="/admin/modules/new" method="POST">
-	<input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
-	<div>
-		<label for="moduleName">Module Name:</label><br>
-		<input type="text" id="moduleName" name="moduleName" value="{{ .ModuleName }}" required size="50">
-	</div>
-	<br>
-	<div>
-		<label for="customSlug">Custom URL Slug (Optional):</label><br>
-		<input type="text" id="customSlug" name="customSlug" value="{{ .CustomSlug }}" size="50" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens only (e.g., my-cool-module)">
-		<small>If left blank, a UUID will be used. Use lowercase letters, numbers, and hyphens.</small>
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+    <div class="gws-form-group">
+        <label for="moduleName">Module Name:</label>
+        <input type="text" id="moduleName" name="moduleName" value="{{ .ModuleName }}" required>
     </div>
-    <br>
-    <div>
-    	<button type="submit">Create Module</button>
-    	<a href="/admin/" class="ml-1">Cancel</a>
+
+    <div class="gws-form-group">
+        <label for="customSlug">Custom URL Slug (Optional):</label>
+        <input type="text" id="customSlug" name="customSlug" value="{{ .CustomSlug }}" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Use lowercase letters, numbers, and hyphens only (e.g., my-cool-module)">
+        <small class="gws-form-hint">If left blank, a UUID will be used. Use lowercase letters, numbers, and hyphens.</small>
+    </div>
+
+    <div class="gws-form-group"> <!-- Grouping buttons for consistent spacing -->
+        <button type="submit">Create Module</button>
+        <a href="/" role="button" class="gws-ml-1 btn-outline">Cancel</a> <!-- Added btn-outline for styling -->
     </div>
 </form>
 {{ end }}

@@ -6,7 +6,7 @@
 <div id="module-list">
 	{{/* Accessing Page specific data via .Page */}}
 	{{ if .Page.Error }}
-		<p class="text-error">Error: {{ .Page.Error }}</p>
+		<p class="gws-text-error">Error: {{ .Page.Error }}</p>
 	{{ else if not .Page.Modules }}
 		<p>No modules found.</p>
 	{{ else }}
@@ -31,10 +31,10 @@
             		<td>{{ len .Templates }}</td>
             		               <td>
             		                   <!-- Edit Code Link -->
-            		                   <a href="/admin/modules/edit/{{ .ID }}" role="button" class="action-link">Edit Code</a>
+            		                   <a href="/admin/modules/edit/{{ .ID }}" role="button" class="gws-action-link">Edit Code</a>
          
             		                   <!-- Delete Form/Button -->
-            		                   <form action="/admin/modules/delete/{{ .ID }}" method="POST" class="inline-form" onsubmit="return confirm('Are you sure you want to soft-delete module \'{{ .Name }}\' (ID: {{ .ID }})?');">
+            		                   <form action="/admin/modules/delete/{{ .ID }}" method="POST" class="gws-inline-form" onsubmit="return confirm('Are you sure you want to soft-delete module \'{{ .Name }}\' (ID: {{ .ID }})?');">
                         	<input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
                         	<input type="hidden" name="force" value="false"> {{/* Default to soft delete */}}
                             <button type="submit">Delete</button>

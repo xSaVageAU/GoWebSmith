@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveStatusSpan = document.getElementById('save-status');
     let currentEditingFile = null;
 
-    const editorLayoutElement = document.querySelector('.editor-layout');
+    const editorLayoutElement = document.querySelector('.gws-editor-layout');
     let currentModuleID = editorLayoutElement ? editorLayoutElement.dataset.moduleId : null;
 
     if (!currentModuleID) {
@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 triggerPreview();
             } catch (error) {
                 editorTextarea.value = `Error loading file: ${error.message}`;
-                previewPane.innerHTML = `<p class="preview-error">Error loading file for preview.</p>`;
+                previewPane.innerHTML = `<p class="gws-preview-error">Error loading file for preview.</p>`;
                 console.error("Error loading template:", error);
             }
         });
@@ -69,10 +69,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(`Preview failed: ${response.status} ${response.statusText} - ${errorText}`);
             }
             const previewHtml = await response.text();
-            previewPane.innerHTML = previewHtml;
-            // For iframe: previewPane.innerHTML = `<iframe srcdoc="${escapeHtml(previewHtml)}"></iframe>`;
+            // Use iframe with srcdoc for proper style isolation
+            previewPane.innerHTML = `<iframe srcdoc="${escapeHtml(previewHtml)}" style="width:100%; height:100%; border:none;"></iframe>`;
         } catch (error) {
-            previewPane.innerHTML = `<p class="preview-error">Preview error: ${error.message}</p>`;
+            // Display error inside the preview pane, but not in an iframe
+            previewPane.innerHTML = `<p class="gws-preview-error">Preview error: ${error.message}</p>`;
             console.error("Error triggering preview:", error);
         }
     }

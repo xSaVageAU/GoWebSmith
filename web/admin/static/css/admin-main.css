@@ -84,7 +84,7 @@ a:hover, a:focus {
 
 /* --- Header & Navigation Styles (Adapted from mockup/header.css) --- */
 
-.top-header {
+.gws-top-header {
     background: var(--bg-glass);
     backdrop-filter: blur(14px) saturate(110%); /* Corresponds to --mica-blur */
     -webkit-backdrop-filter: blur(14px) saturate(110%); /* For Safari */
@@ -99,18 +99,18 @@ a:hover, a:focus {
     z-index: 1000; /* Ensure it's above other content */
 }
 
-.logo {
+.gws-logo {
     display: flex;
     align-items: center;
 }
 
-.logo i {
+.gws-logo i {
     font-size: 1.75rem; /* Ensure Bootstrap Icons are linked in HTML */
     color: var(--primary);
     margin-right: 0.75rem;
 }
 
-.logo h1 {
+.gws-logo h1 {
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--primary); /* Fallback if gradient doesn't work */
@@ -121,19 +121,19 @@ a:hover, a:focus {
     margin: 0; /* Reset from default h1 margin */
 }
 
-.header-controls { /* Placeholder for future icons/buttons */
+.gws-header-controls { /* Placeholder for future icons/buttons */
     display: flex;
     align-items: center;
     gap: 1.5rem;
 }
-.header-actions {
+.gws-header-actions {
     display: flex;
     align-items: center;
     gap: 1rem;
 }
 
 
-.tab-nav {
+.gws-tab-nav {
     background: var(--bg-glass);
     backdrop-filter: blur(14px) saturate(110%);
     -webkit-backdrop-filter: blur(14px) saturate(110%);
@@ -145,7 +145,7 @@ a:hover, a:focus {
     z-index: 999; /* Below top-header */
    }
 
-.tab-nav ul {
+.gws-tab-nav ul {
     display: flex;
     list-style: none;
     gap: 0.5rem; /* Reduced gap for closer tabs */
@@ -153,13 +153,13 @@ a:hover, a:focus {
     padding: 0; /* Remove default ul padding */
 }
 
-.tab-nav li { /* Styling for the li element itself for background changes */
+.gws-tab-nav li { /* Styling for the li element itself for background changes */
     padding: 0; /* Padding will be on the 'a' tag */
     position: relative;
     transition: background 0.2s; /* Smooth transition for hover on li */
 }
 
-.tab-nav li a {
+.gws-tab-nav li a {
     display: flex; /* To align icon and text */
     align-items: center;
     gap: 0.5rem;
@@ -173,15 +173,15 @@ a:hover, a:focus {
     transition: color 0.2s, border-bottom-color 0.2s;
 }
 
-.tab-nav li a i {
+.gws-tab-nav li a i {
     font-size: 1rem; /* Icon size */
 }
 
-.tab-nav li.active a { /* Style the 'a' tag within the active 'li' */
+.gws-tab-nav li.active a { /* Style the 'a' tag within the active 'li' */
     color: var(--primary);
     border-bottom-color: var(--primary);
 }
-.tab-nav li:not(.active) a:hover {
+.gws-tab-nav li:not(.active) a:hover {
     color: var(--text-light);
     border-bottom-color: var(--overlay1);
 }
@@ -196,70 +196,226 @@ main {
 /* Footer removed */
 
 h2, h3, h4 {
-    /* TODO: Update heading styles based on mockup */
-    color: var(--text-light); /* Defaulting to light text for now */
+    font-weight: 600; /* Based on .card-header h3 */
+    color: var(--primary); /* Fallback color */
+    background: var(--gradient-accent); /* Gradient from .card-header h3 */
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.75rem; /* Add some space below headings */
+}
+
+h2 {
+    font-size: 1.75rem; /* Larger for h2 */
+    margin-top: 1.5rem; /* More space above h2 */
+}
+
+h3 {
+    font-size: 1.4rem; /* Slightly larger than .card-header h3 for general use */
+    margin-top: 1.25rem;
+}
+
+h4 {
+    font-size: 1.1rem; /* Same as .card-header h3 */
+    margin-top: 1rem;
 }
 
 
 button, a[role="button"] {
-    /* TODO: Update button styles based on mockup (components.css / forms.css) */
-    background-color: var(--primary);
-    color: var(--text-light); /* Light text on primary bg */
+    background: var(--gradient-accent);
+    color: #fff; /* White text on primary gradient */
     border: none;
-    padding: 0.6em 1.2em;
-    border-radius: var(--border-radius); /* Use mockup border radius */
+    padding: 0.5rem 1rem; /* From .btn */
+    border-radius: var(--border-radius); /* Consistent with mockup */
+    font-size: 0.875rem; /* From .btn */
+    font-weight: 500; /* From .btn */
     cursor: pointer;
+    display: inline-flex; /* From .btn, for icon alignment */
+    align-items: center; /* From .btn */
+    justify-content: center; /* From .btn */
+    gap: 0.5rem; /* From .btn, space between icon and text */
     text-decoration: none;
-    font-weight: 500;
-    display: inline-block;
-    text-align: center;
-    transition: background-color 0.15s;
+    transition: all 0.2s; /* From .btn, for all properties */
+    box-shadow: 0 2px 16px 0 rgba(139, 92, 246, 0.3); /* From .btn-primary */
 }
 
 button:hover, a[role="button"]:hover,
 button:focus, a[role="button"]:focus {
-	background-color: var(--primary-hover);
+    background: var(--primary); /* From .btn-primary:hover */
+    transform: translateY(-1px); /* From .btn-primary:hover */
+    box-shadow: 0 4px 20px 0 rgba(139, 92, 246, 0.4); /* From .btn-primary:hover */
+    color: #fff; /* Ensure text color remains white on hover */
+}
+
+/* Additional button styles from mockup */
+.btn-outline {
+    background: transparent;
+    color: var(--text-light);
+    border: 1px solid var(--border-color);
+    /* Inherits padding, font-size, etc. from the base button, a[role="button"] style */
+}
+
+.btn-outline:hover, .btn-outline:focus {
+    background: rgba(139, 92, 246, 0.1); /* Primary color with alpha */
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px); /* Consistent hover effect */
+    box-shadow: none; /* Outline buttons typically don't have a heavy shadow */
+}
+
+.btn-danger {
+    background: linear-gradient(90deg, #ef4444 0%, #f97316 100%);
+    color: #fff;
+    border: none;
+    /* Inherits padding, font-size, etc. */
+}
+
+.btn-danger:hover, .btn-danger:focus {
+    background: #ef4444; /* Solid red on hover */
+    color: #fff;
+    box-shadow: 0 4px 20px 0 rgba(239, 68, 68, 0.4); /* Danger shadow */
+    transform: translateY(-1px); /* Consistent hover effect */
 }
 
 
-/* Styles from dashboard.html */
-#module-list table {
-    /* TODO: Update table styles based on mockup (dashboard.css / modules.css) */
+/* --- Form Input Styling (Adapted from mockup/forms.css) --- */
+
+.gws-form-group {
+    margin-bottom: 1.25rem; /* Spacing from .form-group */
+}
+
+label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary); /* From label */
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="url"],
+input[type="number"],
+input[type="search"],
+textarea,
+select {
     width: 100%;
-    border-collapse: collapse;
-    margin-top: 1em;
-    border: 1px solid var(--border-color);
+    padding: 0.625rem 0.875rem; /* From input, select, textarea */
+    border: 1.5px solid var(--border-color); /* From input, select, textarea */
+    border-radius: var(--border-radius); /* Consistent with mockup */
+    font-family: inherit; /* From input, select, textarea */
+    font-size: 0.875rem; /* From input, select, textarea */
+    color: var(--text-light); /* From input, select, textarea */
+    background: rgba(40,44,56,0.93); /* From input, select, textarea */
+    transition: border-color 0.2s, box-shadow 0.2s; /* For focus effect */
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+input[type="url"]:focus,
+input[type="number"]:focus,
+input[type="search"]:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary); /* From input:focus */
+    box-shadow: 0 0 0 2px rgba(139,92,246,0.2); /* From input:focus */
+}
+
+textarea {
+    min-height: 120px; /* From textarea */
+    resize: vertical; /* From textarea */
+}
+
+/* Basic select arrow styling (more comprehensive styling in forms.css if needed) */
+select {
+    -moz-appearance: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1em;
+    padding-right: 2.5rem; /* To make space for arrow */
+}
+
+.gws-form-hint { /* For <small> tags or helper text */
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary); /* From .form-hint */
+    margin-top: 0.375rem; /* From .form-hint */
+}
+
+
+/* --- Dashboard Table Styling (General Theme Alignment) --- */
+#module-list table {
+    width: 100%;
+    border-collapse: collapse; /* Keep this */
+    margin-top: 1.5em; /* Increased top margin */
+    border: 1.5px solid var(--bg-glass-border); /* Use glass border for the table outline */
+    border-radius: var(--border-radius); /* Rounded corners for the table */
+    overflow: hidden; /* To make border-radius work on table */
+    box-shadow: var(--shadow-md); /* Add a subtle shadow */
+    background-color: var(--bg-glass); /* Glass background for the table */
 }
 
 #module-list th,
 #module-list td {
-    border: 1px solid var(--border-color);
-    padding: 0.75em;
+    padding: 1em 1.25em; /* Increased padding */
     text-align: left;
+    border-bottom: 1px solid var(--border-color); /* Only bottom borders for rows */
 }
 
 #module-list th {
-    background-color: rgba(30, 34, 45, 0.65); /* Using bg-glass for header */
-    color: var(--text-secondary);
+    background-color: rgba(30, 34, 45, 0.85); /* Darker glass for header, slightly more opaque */
+    color: var(--text-light); /* Brighter text for headers */
+    font-weight: 600; /* Bolder header text */
+    border-bottom-width: 1.5px; /* Thicker border below header */
+    border-bottom-color: var(--bg-glass-border);
 }
 
-.text-error { /* For error messages */
+/* Remove border from the last row's cells */
+#module-list tr:last-child td {
+    border-bottom: none;
+}
+
+/* Add a hover effect to table rows */
+#module-list tbody tr:hover {
+    background-color: rgba(139, 92, 246, 0.08); /* Subtle primary color highlight */
+}
+
+/* Style for action links within the table to make them more button-like if needed */
+#module-list .gws-action-link {
+    /* Using existing 'a' styles, but could be styled as small buttons if desired */
+    margin-right: 0.5rem;
+}
+
+#module-list .gws-inline-form button {
+    /* Using existing button styles, ensure they fit well in table cells */
+    padding: 0.4rem 0.8rem; /* Slightly smaller padding for table buttons */
+    font-size: 0.8rem;
+}
+
+
+.gws-text-error { /* For error messages */
     color: var(--red); /* Using defined red */
     /* The inline style for background/border on module_form.html will still apply for now */
 }
 
-.action-link { /* For links like Edit Code */
+.gws-action-link { /* For links like Edit Code */
     margin-right: 5px;
 }
 
-.inline-form { /* For forms like Delete */
+.gws-inline-form { /* For forms like Delete */
     display: inline;
 }
 
-.mt-1 { /* Utility for margin-top: 1em */
+.gws-mt-1 { /* Utility for margin-top: 1em */
     margin-top: 1em;
 }
 
-.ml-1 { /* Utility for margin-left: 1em */
+.gws-ml-1 { /* Utility for margin-left: 1em */
     margin-left: 1em;
 }
