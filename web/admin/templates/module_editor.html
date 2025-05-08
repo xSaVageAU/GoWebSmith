@@ -1,4 +1,9 @@
 {{ define "extra_css" }}
+    <!-- CodeMirror Core CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.css">
+    <!-- CodeMirror Theme CSS (e.g., Dracula) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/theme/dracula.min.css">
+    <!-- Your Custom Editor CSS -->
     <link rel="stylesheet" href="/static/css/admin-editor.css">
 {{ end }}
 
@@ -7,18 +12,17 @@
 {{/* Removed H2 title to save vertical space */}}
 {{/* <h2>Editing Module: {{ .ModuleData.Name }} ({{ .ModuleData.ID }})</h2> */}}
 
-<div class="gws-editor-layout" data-module-id="{{ .ModuleData.ID }}">
+<div class="gws-editor-layout" data-module-id="{{ .ModuleData.ID }}" data-csrf-token="{{ .CSRFToken }}"> <!-- Added CSRF Token -->
 
     {{/* File List Pane */}}
     <div class="gws-file-list-pane">
         <h4>Templates</h4>
         <ul id="template-file-list">
             {{ range .ModuleData.Templates }}
-            <li>
-                <button class="file-button" data-filename="{{ .Name }}">
-                    {{ .Name }}
-                    {{ if .IsBase }}<span class="gws-base-badge">Base</span>{{ end }}
-                </button>
+            <li data-filename="{{ .Name }}"> <!-- Moved data-filename here -->
+                {{/* Removed button wrapper */}}
+                {{ .Name }}
+                {{ if .IsBase }}<span class="gws-base-badge">Base</span>{{ end }}
             </li>
             {{ else }}
             <li>No templates found for this module.</li>
@@ -48,13 +52,23 @@
                 <span id="save-status"></span>
             </div>
         </div>
-        <textarea id="editor-content"
-            placeholder="Select a file from the left to edit..."
-            readonly
-        ></textarea>
+        <div class="gws-editor-textarea-wrapper"> <!-- Added wrapper -->
+            <textarea id="editor-content"
+                placeholder="Select a file from the left to edit..."
+                readonly
+            ></textarea>
+        </div>
     </div>
 
 </div>
 
+<!-- CodeMirror Core JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.js"></script>
+<!-- CodeMirror Modes JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/mode/htmlmixed/htmlmixed.min.js"></script>
+<!-- Your Custom Editor JS -->
 <script src="/static/js/admin-editor.js" defer></script>
 {{ end }}

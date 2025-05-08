@@ -35,7 +35,8 @@
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    padding: 0.75rem 1rem; /* Reverted padding */
+    /* Increased right padding to prevent badge overlap */
+    padding: 0.75rem 4.5rem 0.75rem 1rem; /* T R B L - Added more right padding */
     margin-bottom: 0.75rem;
     transition: background 0.2s, border-color 0.2s; /* Removed transform from transition */
     cursor: pointer; /* Reverted cursor */
@@ -44,6 +45,15 @@
 }
 
 /* Removed the specific button styles added previously */
+
+
+/* Prevent hover effects on the button itself */
+#template-file-list li button.file-button:hover {
+    background: none;
+    border: none;
+    box-shadow: none;
+    /* Add any other properties needed to negate hover styles */
+}
 
 #template-file-list li:hover {
     background: rgba(139, 92, 246, 0.1); /* Primary color with alpha */
@@ -94,16 +104,23 @@
     box-shadow: 0 -3px 15px rgba(0,0,0,0.3); /* Shadow on the top edge */
     padding: 1rem;
     z-index: 1050; /* Above other admin elements */
-    display: none; /* Initially hidden */
+    /* display: none; Removed for transition */
+    visibility: hidden; /* Use visibility for accessibility and transitions */
+    opacity: 0;
+    transform: translateY(100%); /* Start below the viewport */
+    transition: transform 0.3s ease-out, opacity 0.3s ease-out, visibility 0s linear 0.3s; /* Delay visibility change */
+    display: flex; /* Ensure it's always a flex container */
     flex-direction: column; /* To stack controls and textarea */
     gap: 1rem; /* Space between controls and textarea */
     border-top: 1.5px solid var(--border-color);
-    /* transition: transform 0.3s ease-out; */ /* For later show/hide animation */
 }
 
 .gws-editor-overlay.visible { /* Class to show the overlay */
-    display: flex;
-    /* transform: translateY(0); */
+    /* display: flex; Removed */
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0); /* Slide into view */
+    transition-delay: 0s; /* Ensure visibility transition happens immediately when becoming visible */
 }
 
 
@@ -140,9 +157,16 @@
     /* No background/gradient here, keep it simple */
 }
 
+.gws-editor-textarea-wrapper {
+    flex-grow: 1; /* Make the wrapper grow */
+    min-height: 0; /* Allow wrapper to shrink/grow properly */
+    /* display: flex; Removed */
+}
+
 #editor-content { /* The textarea */
-    width: 100%; /* Full width of its container */
-    flex-grow: 1; /* Textarea will grow to fill the overlay */
+    width: 100%; /* Fill wrapper horizontally */
+    /* height: 100%; Removed, will apply to CodeMirror div */
+    /* flex-grow: 1; Removed, now on wrapper */
     font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; /* Common monospace stack */
     margin-bottom: 0; /* Remove bottom margin, parent has gap */
     padding: 0.75rem 1rem;
@@ -170,6 +194,20 @@
 #save-status.gws-error {
     color: var(--red);
 }
+
+/* Style the CodeMirror editor element itself */
+.gws-editor-textarea-wrapper .CodeMirror {
+    height: 100%; /* Make CodeMirror fill the wrapper */
+    /* Inherit font-size etc. from CodeMirror's theme or defaults */
+    border-radius: var(--border-radius); /* Match other inputs */
+    border: 1.5px solid var(--border-color); /* Match other inputs */
+}
+
+.gws-editor-textarea-wrapper .CodeMirror-focused {
+     border-color: var(--primary); /* Match focus style */
+     box-shadow: 0 0 0 2px rgba(139,92,246,0.2); /* Match focus style */
+}
+
 
 /* Preview Pane */
 .gws-preview-pane-container {
