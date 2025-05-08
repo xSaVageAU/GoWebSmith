@@ -14,28 +14,26 @@
     <link rel="stylesheet" href="/static/css/admin-main.css">
     {{ block "extra_css" . }}{{ end }} <!-- Block for page-specific CSS -->
    </head>
-   <body>
-    <header class="gws-top-header">
-    	<div class="gws-logo">
-    		<i class="bi bi-boxes"></i> <!-- Icon from mockup -->
-    		<h1>GoWebSmith</h1> <!-- Updated project name -->
-    	</div>
-    	<div class="gws-header-controls">
-    		<div class="gws-header-actions">
-    			<!-- Placeholder for future controls like notifications, settings, user profile -->
-    		</div>
-    	</div>
-    </header>
-    <nav class="gws-tab-nav">
-    	<ul>
-    		<li {{ if eq .ActiveNav "dashboard" }}class="active"{{ end }}><a href="/"><i class="bi bi-grid-fill"></i>Dashboard</a></li>
-    		<li {{ if eq .ActiveNav "create" }}class="active"{{ end }}><a href="/admin/modules/new"><i class="bi bi-plus-square"></i>Create Module</a></li>
-    		<!-- Add other navigation links later, e.g., Assets -->
-    		<!-- <li {{ if eq .ActiveNav "assets" }}class="active"{{ end }}><a href="/admin/assets"><i class="bi bi-folder"></i>Assets</a></li> -->
-    		<!-- Note: Module Editor page doesn't have its own nav item, so it won't highlight one -->
-    	</ul>
-    </nav>
-    <main>
+   <body class="gws-body-has-sidebar"> <!-- Add class to body for potential global styling -->
+
+    <aside id="gws-sidebar" class="gws-sidebar">
+        <div class="gws-logo">
+            <i class="bi bi-boxes"></i> <!-- Icon from mockup -->
+            <h1>GoWebSmith</h1> <!-- Updated project name -->
+        </div>
+        <nav class="gws-sidebar-nav">
+            <ul>
+                <li {{ if eq .ActiveNav "dashboard" }}class="active"{{ end }}><a href="/"><i class="bi bi-grid-fill"></i>Dashboard</a></li>
+                <li {{ if eq .ActiveNav "create" }}class="active"{{ end }}><a href="/admin/modules/new"><i class="bi bi-plus-square"></i>Create Module</a></li>
+                <!-- Add other navigation links later, e.g., Assets -->
+                <!-- <li {{ if eq .ActiveNav "assets" }}class="active"{{ end }}><a href="/admin/assets"><i class="bi bi-folder"></i>Assets</a></li> -->
+                <!-- Note: Module Editor page doesn't have its own nav item, so it won't highlight one -->
+            </ul>
+        </nav>
+        <!-- Add other sidebar elements later if needed, e.g., footer/logout -->
+    </aside>
+
+    <main class="gws-main-content"> <!-- Add class to main for styling -->
         {{ block "content" . }}
             <!-- Default content if block is not defined -->
             <p>Welcome to the Admin Interface.</p>

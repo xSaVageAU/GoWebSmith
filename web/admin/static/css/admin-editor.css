@@ -2,14 +2,15 @@
 .gws-editor-layout {
     display: flex;
     gap: 1.5rem; /* Increased gap */
-    margin-top: 1rem;
-    height: calc(100vh - 140px); /* Adjusted height considering header/nav */
-    padding: 0 1rem; /* Add some horizontal padding to the overall layout */
+    /* margin-top: 1rem; Removed as parent has padding */
+    height: 100%; /* Fill the parent (.gws-main-content) */
+    padding: 0 1rem; /* Keep horizontal padding for now */
+    position: relative; /* For potential absolute positioning of overlay if not fixed */
 }
 
 /* File List Pane */
 .gws-file-list-pane {
-    flex: 0 0 300px; /* Increased width like mockup */
+    /* flex: 0 0 300px; Removed to allow shrinking */
     background-color: var(--bg-glass);
     border-right: 1.5px solid var(--border-color);
     padding: 1rem;
@@ -30,21 +31,24 @@
 }
 
 #template-file-list li {
-    background: rgba(255, 255, 255, 0.03); /* Slightly different from pane bg */
+    position: relative; /* Needed for absolute positioning of badge */
+    background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-color);
-    border-radius: 8px; /* Mockup's .template-item radius */
-    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    padding: 0.75rem 1rem; /* Reverted padding */
     margin-bottom: 0.75rem;
-    cursor: pointer;
-    transition: background 0.2s, border-color 0.2s, transform 0.1s;
-    font-size: 0.875rem;
-    color: var(--text-light);
+    transition: background 0.2s, border-color 0.2s; /* Removed transform from transition */
+    cursor: pointer; /* Reverted cursor */
+    font-size: 0.875rem; /* Added back from original for clarity */
+    color: var(--text-light); /* Added back from original for clarity */
 }
+
+/* Removed the specific button styles added previously */
 
 #template-file-list li:hover {
     background: rgba(139, 92, 246, 0.1); /* Primary color with alpha */
     border-color: var(--primary);
-    transform: translateY(-1px);
+    /* transform: translateY(-1px); Removed to prevent badge shifting */
 }
 
 #template-file-list li.gws-active-file {
@@ -55,15 +59,75 @@
 }
 
 
-/* Editor Pane */
-.gws-editor-pane {
-    flex: 2; /* Takes up 2 parts of available space */
-    display: flex;
-    flex-direction: column;
-    gap: 1rem; /* Space between filename/controls and textarea */
+
+/* Style for the 'Base' template badge */
+.gws-base-badge {
+    position: absolute; /* Position relative to li */
+    top: 0.5rem; /* Adjust as needed */
+    right: 0.5rem; /* Adjust as needed */
+    padding: 0.2em 0.5em;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    border-radius: 4px; /* Smaller radius */
+    background-color: #f97316; /* Sunset Orange */
+    color: #fff; /* White text */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    /* Removed margin-left and vertical-align */
+    transform: translateZ(0); /* Attempt to force onto own rendering layer */
 }
 
-.gws-editor-controls { /* Container for filename and save button */
+
+/* Editor Overlay (replaces .gws-editor-pane) */
+.gws-editor-overlay {
+    position: fixed; /* Fixed to viewport bottom */
+    bottom: 0;
+    left: 0;
+    right: 0;
+    /* width: 100%; */ /* Covered by left:0, right:0 */
+    height: 40vh; /* Initial height, can be made resizable later */
+    max-height: 80vh; /* Prevent it from taking too much space */
+    background-color: var(--bg-dark); /* Darker than bg-glass */
+    box-shadow: 0 -3px 15px rgba(0,0,0,0.3); /* Shadow on the top edge */
+    padding: 1rem;
+    z-index: 1050; /* Above other admin elements */
+    display: none; /* Initially hidden */
+    flex-direction: column; /* To stack controls and textarea */
+    gap: 1rem; /* Space between controls and textarea */
+    border-top: 1.5px solid var(--border-color);
+    /* transition: transform 0.3s ease-out; */ /* For later show/hide animation */
+}
+
+.gws-editor-overlay.visible { /* Class to show the overlay */
+    display: flex;
+    /* transform: translateY(0); */
+}
+
+
+.gws-editor-resizer {
+    width: 100%;
+    height: 10px; /* Small height for the handle */
+    background-color: var(--border-color); /* Subtle color */
+    /* background: var(--gradient-accent); */ /* Alternative: use accent gradient */
+    cursor: ns-resize; /* North-south resize cursor */
+    /* Potentially add a small visual indicator like dots or lines */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1px solid rgba(0,0,0,0.2); /* Slight separation */
+}
+
+.gws-editor-resizer::before { /* Optional: visual dots for the handle */
+    content: '•••';
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+.gws-editor-controls { /* Container for filename and save button - styles remain similar */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -78,7 +142,7 @@
 
 #editor-content { /* The textarea */
     width: 100%; /* Full width of its container */
-    flex-grow: 1;
+    flex-grow: 1; /* Textarea will grow to fill the overlay */
     font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; /* Common monospace stack */
     margin-bottom: 0; /* Remove bottom margin, parent has gap */
     padding: 0.75rem 1rem;
@@ -109,16 +173,44 @@
 
 /* Preview Pane */
 .gws-preview-pane-container {
-    flex: 3; /* Takes up 3 parts of available space */
-    border: 1.5px solid var(--border-color); /* Consistent border */
-    padding: 1rem; /* Mockup's .live-preview-area padding */
-    background-color: rgba(0,0,0,0.1); /* Mockup's .live-preview-area bg */
-    overflow: auto;
+    flex: 3;
+    border: 1.5px solid var(--border-color);
+    background-color: rgba(0,0,0,0.1);
     border-radius: var(--border-radius);
-    display: flex; /* To make #preview-pane fill it */
+    display: flex;
+    flex-direction: column; /* Stack header and pane vertically */
+    overflow: hidden; /* Prevent container scroll, pane will scroll */
 }
 
+.gws-preview-header {
+    display: flex;
+    justify-content: space-between; /* Space out title and ID */
+    align-items: center;
+    padding: 0.5rem 1rem; /* Padding for the header */
+    border-bottom: 1.5px solid var(--border-color); /* Separator */
+    background-color: rgba(30, 34, 45, 0.65); /* Use bg-glass */
+    flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.gws-preview-header h4 {
+    margin: 0; /* Remove default heading margin */
+    font-size: 1rem; /* Slightly smaller */
+    /* Inherits gradient color from main CSS */
+}
+
+.gws-preview-header .gws-module-id-display {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background-color: rgba(255,255,255,0.05);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+}
+
+
 #preview-pane { /* This is the inner div where content is injected */
+    flex-grow: 1; /* Allow pane to fill remaining vertical space */
+    overflow: auto; /* Allow scrolling within the pane itself */
     width: 100%;
     height: 100%;
     border: none;

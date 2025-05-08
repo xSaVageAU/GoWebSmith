@@ -4,7 +4,8 @@
 
 {{ define "content" }}
 {{/* .ModuleData here will be the *model.Module from the handler */}}
-<h2>Editing Module: {{ .ModuleData.Name }} ({{ .ModuleData.ID }})</h2>
+{{/* Removed H2 title to save vertical space */}}
+{{/* <h2>Editing Module: {{ .ModuleData.Name }} ({{ .ModuleData.ID }})</h2> */}}
 
 <div class="gws-editor-layout" data-module-id="{{ .ModuleData.ID }}">
 
@@ -16,6 +17,7 @@
             <li>
                 <button class="file-button" data-filename="{{ .Name }}">
                     {{ .Name }}
+                    {{ if .IsBase }}<span class="gws-base-badge">Base</span>{{ end }}
                 </button>
             </li>
             {{ else }}
@@ -25,9 +27,21 @@
         {{/* TODO: Add button to add new template file? */}}
     </div>
 
-    {{/* Editor Pane */}}
-    <div class="gws-editor-pane">
-        <div class="gws-editor-controls"> <!-- Added this wrapper -->
+    {{/* Preview Pane - Now takes up the main space next to file list */}}
+    <div class="gws-preview-pane-container">
+        <div class="gws-preview-header">
+             <h4>Live Preview</h4>
+             <span class="gws-module-id-display">ID: {{ .ModuleData.ID }}</span>
+        </div>
+        <div id="preview-pane">
+            Select a file and start editing to see preview...
+        </div>
+    </div>
+
+    {{/* Editor Overlay Container - Positioned via CSS */}}
+    <div id="gws-editor-overlay-container" class="gws-editor-overlay"> <!-- Was gws-editor-pane -->
+        <div id="gws-editor-resizer" class="gws-editor-resizer"></div> <!-- Resizer Handle -->
+        <div class="gws-editor-controls">
             <h4>Editor: <span id="current-filename">No file selected</span></h4>
             <div> <!-- Wrapper for button and status -->
                 <button id="save-changes-button" disabled>Save Changes</button>
@@ -38,15 +52,6 @@
             placeholder="Select a file from the left to edit..."
             readonly
         ></textarea>
-    {{/* Removed the extra div that was here previously */}}
-    </div>
-
-    {{/* Preview Pane */}}
-    <div class="gws-preview-pane-container">
-        <h4>Live Preview</h4>
-        <div id="preview-pane">
-            Select a file and start editing to see preview...
-        </div>
     </div>
 
 </div>

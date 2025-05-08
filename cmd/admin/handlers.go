@@ -243,6 +243,19 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// --- Sort Templates by Order, then Name ---
+	if module != nil && module.Templates != nil {
+		sort.SliceStable(module.Templates, func(i, j int) bool {
+			if module.Templates[i].Order != module.Templates[j].Order {
+				return module.Templates[i].Order < module.Templates[j].Order
+			}
+			// Secondary sort by name if orders are equal
+			return module.Templates[i].Name < module.Templates[j].Name
+		})
+		app.logger.Debug("Sorted templates for editor view", "moduleID", moduleID)
+	}
+	// --- End Sorting ---
+
 	// Retrieve the module_editor.html template from cache
 	ts, ok := app.templateCache["module_editor.html"]
 	if !ok {
@@ -255,7 +268,7 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 	// Note: There isn't a specific nav item for "edit", but we pass it for potential future use or context.
 	data := app.newTemplateData(r, "edit")
 	data["CurrentYear"] = time.Now().Year() // For layout compatibility
-	data["ModuleData"] = module             // Pass the *model.Module object, using a more specific key
+	data["ModuleData"] = module             // Pass the *model.Module object (now with sorted Templates)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	err = ts.ExecuteTemplate(w, "layout.html", data) // layout.html is the entry point for cached templates

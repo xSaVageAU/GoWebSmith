@@ -39,15 +39,19 @@ html {
 }
 
 /* Base body styles */
-body {
-	font-family: 'Poppins', sans-serif; /* Using Poppins from mockup */
+body { /* Keep base font, color etc */
+	font-family: 'Poppins', sans-serif;
 	margin: 0;
-	display: flex;
-	flex-direction: column;
-	min-height: 100%;
     background-color: var(--bg-dark);
     color: var(--text-light);
-    line-height: 1.5; /* Using mockup's line-height */
+    line-height: 1.5;
+}
+
+/* New body style for sidebar layout */
+body.gws-body-has-sidebar {
+    display: flex;
+    flex-direction: row; /* Sidebar and main content side-by-side */
+    min-height: 100vh; /* Ensure body takes full viewport height */
 }
 
 /* General typography */
@@ -82,115 +86,100 @@ a:hover, a:focus {
 }
 
 
-/* --- Header & Navigation Styles (Adapted from mockup/header.css) --- */
+/* --- Sidebar Layout Styles --- */
 
-.gws-top-header {
-    background: var(--bg-glass);
-    backdrop-filter: blur(14px) saturate(110%); /* Corresponds to --mica-blur */
-    -webkit-backdrop-filter: blur(14px) saturate(110%); /* For Safari */
-    border-bottom: 1.5px solid var(--bg-glass-border);
-    box-shadow: var(--shadow-md);
-    padding: 1rem 2rem;
+.gws-sidebar {
+    width: 240px; /* Sidebar width - Reduced */
+    height: 100vh; /* Full viewport height */
+    background-color: var(--bg-glass); /* Use glass effect */
+    backdrop-filter: blur(14px) saturate(110%);
+    -webkit-backdrop-filter: blur(14px) saturate(110%);
+    border-right: 1.5px solid var(--bg-glass-border);
+    padding: 1.5rem 1rem; /* Padding inside sidebar */
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    position: sticky; /* Make header sticky */
+    flex-direction: column; /* Stack logo and nav vertically */
+    flex-shrink: 0; /* Prevent sidebar from shrinking */
+    position: sticky; /* Keep sidebar visible when main content scrolls */
     top: 0;
-    z-index: 1000; /* Ensure it's above other content */
 }
 
-.gws-logo {
-    display: flex;
-    align-items: center;
+.gws-sidebar .gws-logo {
+    padding-bottom: 1.5rem; /* Space below logo */
+    margin-bottom: 1.5rem; /* Space above nav */
+    border-bottom: 1px solid var(--border-color); /* Separator line */
 }
 
-.gws-logo i {
-    font-size: 1.75rem; /* Ensure Bootstrap Icons are linked in HTML */
+/* Explicitly style logo elements within the sidebar */
+.gws-sidebar .gws-logo i {
+    font-size: 1.75rem;
     color: var(--primary);
     margin-right: 0.75rem;
 }
 
-.gws-logo h1 {
+.gws-sidebar .gws-logo h1 {
     font-size: 1.25rem;
     font-weight: 600;
-    color: var(--primary); /* Fallback if gradient doesn't work */
+    color: var(--primary); /* Fallback color */
     background: var(--gradient-accent);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin: 0; /* Reset from default h1 margin */
-}
-
-.gws-header-controls { /* Placeholder for future icons/buttons */
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-}
-.gws-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+    margin: 0; /* Reset default h1 margin */
 }
 
 
-.gws-tab-nav {
-    background: var(--bg-glass);
-    backdrop-filter: blur(14px) saturate(110%);
-    -webkit-backdrop-filter: blur(14px) saturate(110%);
-    border-bottom: 1.5px solid var(--bg-glass-border);
-    box-shadow: var(--shadow-sm); /* Lighter shadow for nav */
-    padding: 0 2rem; /* Padding only left/right */
-    position: sticky;
-    top: 75px; /* Adjusted to match computed header height */
-    z-index: 999; /* Below top-header */
-   }
+.gws-sidebar-nav {
+    flex-grow: 1; /* Allow nav to take remaining vertical space */
+}
 
-.gws-tab-nav ul {
-    display: flex;
+.gws-sidebar-nav ul {
     list-style: none;
-    gap: 0.5rem; /* Reduced gap for closer tabs */
+    padding: 0;
     margin: 0;
-    padding: 0; /* Remove default ul padding */
 }
 
-.gws-tab-nav li { /* Styling for the li element itself for background changes */
-    padding: 0; /* Padding will be on the 'a' tag */
-    position: relative;
-    transition: background 0.2s; /* Smooth transition for hover on li */
+.gws-sidebar-nav li {
+    margin-bottom: 0.5rem; /* Space between nav items */
 }
 
-.gws-tab-nav li a {
-    display: flex; /* To align icon and text */
+.gws-sidebar-nav li a {
+    display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.9rem 1.2rem; /* Padding on the 'a' tag */
-    font-size: 0.875rem;
-    font-weight: 500;
+    gap: 0.75rem; /* Space between icon and text */
+    padding: 0.75rem 1rem; /* Padding inside links */
+    border-radius: 10px; /* Slightly smaller radius for nav items */
     color: var(--text-secondary);
-    cursor: pointer;
-    text-decoration: none; /* Ensure general 'a' rule doesn't override */
-    border-bottom: 3px solid transparent; /* For active indicator */
-    transition: color 0.2s, border-bottom-color 0.2s;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color 0.2s, color 0.2s;
 }
 
-.gws-tab-nav li a i {
-    font-size: 1rem; /* Icon size */
-}
-
-.gws-tab-nav li.active a { /* Style the 'a' tag within the active 'li' */
-    color: var(--primary);
-    border-bottom-color: var(--primary);
-}
-.gws-tab-nav li:not(.active) a:hover {
+.gws-sidebar-nav li a:hover {
+    background-color: rgba(255, 255, 255, 0.05);
     color: var(--text-light);
-    border-bottom-color: var(--overlay1);
+    text-decoration: none; /* Ensure no underline on hover */
+}
+
+.gws-sidebar-nav li.active a {
+    background-color: var(--primary);
+    color: #fff;
+    font-weight: 600;
+}
+
+.gws-sidebar-nav li a i {
+    font-size: 1.1rem; /* Icon size in sidebar */
+    width: 20px; /* Ensure icons align nicely */
+    text-align: center;
 }
 
 
-/* --- Main Content & Footer (Existing, with minor tweaks) --- */
-main {
-	padding: 1.5rem; /* Keep increased padding */
-	flex-grow: 1;
+/* --- Main Content Area Styles --- */
+.gws-main-content { /* Was 'main' */
+    flex-grow: 1; /* Take remaining horizontal space */
+    height: 100vh; /* Full viewport height */
+    overflow-y: auto; /* Allow main content to scroll independently */
+    padding: 1.5rem 2rem; /* Padding inside main area */
 }
 
 /* Footer removed */
@@ -242,7 +231,7 @@ button, a[role="button"] {
 button:hover, a[role="button"]:hover,
 button:focus, a[role="button"]:focus {
     background: var(--primary); /* From .btn-primary:hover */
-    transform: translateY(-1px); /* From .btn-primary:hover */
+    /* transform: translateY(-1px); Removed */
     box-shadow: 0 4px 20px 0 rgba(139, 92, 246, 0.4); /* From .btn-primary:hover */
     color: #fff; /* Ensure text color remains white on hover */
 }
@@ -259,7 +248,7 @@ button:focus, a[role="button"]:focus {
     background: rgba(139, 92, 246, 0.1); /* Primary color with alpha */
     border-color: var(--primary);
     color: var(--primary);
-    transform: translateY(-1px); /* Consistent hover effect */
+    /* transform: translateY(-1px); Removed */
     box-shadow: none; /* Outline buttons typically don't have a heavy shadow */
 }
 
@@ -274,7 +263,7 @@ button:focus, a[role="button"]:focus {
     background: #ef4444; /* Solid red on hover */
     color: #fff;
     box-shadow: 0 4px 20px 0 rgba(239, 68, 68, 0.4); /* Danger shadow */
-    transform: translateY(-1px); /* Consistent hover effect */
+    /* transform: translateY(-1px); Removed */
 }
 
 
