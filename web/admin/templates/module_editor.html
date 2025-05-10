@@ -12,17 +12,52 @@
 {{/* Removed H2 title to save vertical space */}}
 {{/* <h2>Editing Module: {{ .ModuleData.Name }} ({{ .ModuleData.ID }})</h2> */}}
 
+{{/* Display Success/Error Messages (for page load) */}}
+{{ if .PageSuccess }}
+<div class="gws-form-group" style="margin-bottom: 1rem;">
+    <p style="padding: 0.5em; border: 1px solid var(--green); background-color: rgba(16,185,129,0.1); color: var(--green);">
+        <strong>Success:</strong> {{ .PageSuccess }}
+    </p>
+</div>
+{{ end }}
+{{ if .PageError }}
+<div class="gws-form-group" style="margin-bottom: 1rem;">
+    <p class="gws-text-error" style="padding: 0.5em; border: 1px solid var(--red); background-color: rgba(244,63,94,0.1);">
+        <strong>Error:</strong> {{ .PageError }}
+    </p>
+</div>
+{{ end }}
+
+{{/* Container for Dynamic AJAX Messages */}}
+<div id="dynamic-message-container" style="display: none; margin-bottom: 1rem;"></div>
+
 <div class="gws-editor-layout" data-module-id="{{ .ModuleData.ID }}" data-csrf-token="{{ .CSRFToken }}"> <!-- Added CSRF Token -->
 
     {{/* File List Pane */}}
     <div class="gws-file-list-pane">
         <h4>Templates</h4>
+
+        {{/* Form to Add New Template */}}
+        <form id="add-template-form" action="/admin/modules/edit/{{ .ModuleData.ID }}/add-template" method="POST" class="gws-form-group" style="margin-bottom: 1rem;">
+            <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+            <div>
+                <label for="new_template_name" style="font-size: 0.8rem; margin-bottom: 0.25rem;">New Template Filename:</label>
+                <input type="text" id="new_template_name" name="new_template_name" placeholder="e.g., card.html or custom.css" required style="margin-bottom: 0.5rem; font-size: 0.8rem; padding: 0.5rem 0.75rem;">
+            </div>
+            <button type="submit" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">Add Template</button>
+        </form>
+
         <ul id="template-file-list">
             {{ range .ModuleData.Templates }}
-            <li data-filename="{{ .Name }}"> <!-- Moved data-filename here -->
-                {{/* Removed button wrapper */}}
-                {{ .Name }}
-                {{ if .IsBase }}<span class="gws-base-badge">Base</span>{{ end }}
+            <li data-filename="{{ .Name }}" style="display: flex; justify-content: space-between; align-items: center;"> <!-- Moved data-filename here, added flex for button alignment -->
+                <span>
+                    {{ .Name }}
+                    {{ if .IsBase }}<span class="gws-base-badge">Base</span>{{ end }}
+                </span>
+                <form action="/admin/modules/edit/{{ $.ModuleData.ID }}/remove-template/{{ .Name }}" method="POST" class="gws-inline-form" onsubmit="return confirm('Are you sure you want to remove the template \'{{ .Name }}\' from module \'{{ $.ModuleData.Name }}\'? This will delete the file and update metadata.');" style="margin: 0;">
+                    <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                    <button type="submit" class="btn-danger" style="font-size: 0.7rem; padding: 0.2rem 0.5rem; line-height: 1.2;">Remove</button>
+                </form>
             </li>
             {{ else }}
             <li>No templates found for this module.</li>

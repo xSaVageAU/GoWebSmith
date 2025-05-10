@@ -267,8 +267,10 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 	// Prepare data for the template
 	// Note: There isn't a specific nav item for "edit", but we pass it for potential future use or context.
 	data := app.newTemplateData(r, "edit")
-	data["CurrentYear"] = time.Now().Year() // For layout compatibility
-	data["ModuleData"] = module             // Pass the *model.Module object (now with sorted Templates)
+	data["CurrentYear"] = time.Now().Year()            // For layout compatibility
+	data["ModuleData"] = module                        // Pass the *model.Module object (now with sorted Templates)
+	data["PageError"] = r.URL.Query().Get("error")     // Get error from query params
+	data["PageSuccess"] = r.URL.Query().Get("success") // Get success from query params
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	err = ts.ExecuteTemplate(w, "layout.html", data) // layout.html is the entry point for cached templates
@@ -610,4 +612,162 @@ func (app *adminApplication) saveModuleTemplateContentHandler(w http.ResponseWri
 	app.logger.Info("Successfully saved template file", "moduleID", moduleID, "filename", filename, "path", templateFilePath)
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "File %s saved successfully.", filename)
+}
+
+// Define a generic JSON response structure
+type jsonResponse struct {
+	Status  string `json:"status"`         // "success" or "error"
+	Message string `json:"message"`        // User-friendly message
+	Data    any    `json:"data,omitempty"` // Optional data payload
+}
+
+// moduleAddTemplateHandler handles the submission for adding a new template to a module.
+// It now returns JSON instead of redirecting.
+func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *http.Request) {
+	moduleID := chi.URLParam(r, "moduleID")
+	if moduleID == "" {
+		app.logger.Error("moduleAddTemplateHandler: Module ID missing from URL")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Bad Request - Missing Module ID"})
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		app.logger.Error("moduleAddTemplateHandler: Error parsing form data", "error", err, "moduleID", moduleID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Bad Request - Could not parse form"})
+		return
+	}
+
+	newTemplateName := r.PostForm.Get("new_template_name")
+	if newTemplateName == "" {
+		app.logger.Warn("moduleAddTemplateHandler: New template name is required", "moduleID", moduleID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "New template name cannot be empty."})
+		return
+	}
+
+	if strings.Contains(newTemplateName, "/") || strings.Contains(newTemplateName, "\\") {
+		app.logger.Warn("moduleAddTemplateHandler: Invalid characters in template name", "templateName", newTemplateName, "moduleID", moduleID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Template name cannot contain slashes."})
+		return
+	}
+	if !strings.HasSuffix(newTemplateName, ".html") && !strings.HasSuffix(newTemplateName, ".css") && !strings.HasSuffix(newTemplateName, ".tmpl") && !strings.HasSuffix(newTemplateName, ".js") {
+		app.logger.Warn("moduleAddTemplateHandler: Suspicious template extension", "templateName", newTemplateName, "moduleID", moduleID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Template name should have a common extension (e.g., .html, .css, .tmpl, .js)."})
+		return
+	}
+
+	if app.moduleManager == nil {
+		app.logger.Error("moduleAddTemplateHandler: ModuleManager not initialized")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Internal Server Error - Configuration Error"})
+		return
+	}
+
+	addedModule, err := app.moduleManager.AddTemplate(moduleID, newTemplateName)
+	if err != nil {
+		app.logger.Error("moduleAddTemplateHandler: Error adding template via manager", "error", err, "moduleID", moduleID, "templateName", newTemplateName)
+		w.Header().Set("Content-Type", "application/json")
+		// Determine if the error is a user-facing one (like duplicate) or a server error
+		// For now, assume 500 for any manager error, but this could be refined.
+		// If err is a specific type indicating "already exists", could return http.StatusConflict (409)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: fmt.Sprintf("Failed to add template: %v", err)})
+		return
+	}
+
+	app.logger.Info("moduleAddTemplateHandler: Successfully added template", "moduleID", moduleID, "templateName", newTemplateName)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	// Send back the updated list of templates for the JS to re-render the list
+	json.NewEncoder(w).Encode(jsonResponse{
+		Status:  "success",
+		Message: fmt.Sprintf("Template '%s' added successfully.", newTemplateName),
+		Data:    addedModule.Templates,
+	})
+}
+
+// moduleRemoveTemplateHandler handles the submission for removing a template from a module.
+// It now returns JSON instead of redirecting.
+func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, r *http.Request) {
+	moduleID := chi.URLParam(r, "moduleID")
+	templateFilename := chi.URLParam(r, "templateFilename")
+
+	if moduleID == "" || templateFilename == "" {
+		app.logger.Error("moduleRemoveTemplateHandler: Module ID or Template Filename missing from URL")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Bad Request - Missing Module ID or Template Filename"})
+		return
+	}
+
+	// Ensure it's a POST request (nosurf should handle CSRF token from form body)
+	if r.Method != http.MethodPost {
+		app.logger.Warn("moduleRemoveTemplateHandler: Invalid request method", "method", r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Method Not Allowed"})
+		return
+	}
+
+	// It's good practice to parse the form to ensure CSRF token is processed by nosurf,
+	// even if we don't directly use other form values here.
+	if err := r.ParseForm(); err != nil {
+		app.logger.Error("moduleRemoveTemplateHandler: Error parsing form for CSRF", "error", err, "moduleID", moduleID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Bad Request - Could not parse form"})
+		return
+	}
+
+	if app.moduleManager == nil {
+		app.logger.Error("moduleRemoveTemplateHandler: ModuleManager not initialized")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Internal Server Error - Configuration Error"})
+		return
+	}
+
+	err := app.moduleManager.RemoveTemplateFromModule(moduleID, templateFilename)
+	if err != nil {
+		app.logger.Error("moduleRemoveTemplateHandler: Error removing template via manager", "error", err, "moduleID", moduleID, "templateFilename", templateFilename)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError) // Or a more specific error like 404 if template not found by manager
+		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: fmt.Sprintf("Failed to remove template '%s': %v", templateFilename, err)})
+		return
+	}
+
+	// After successful removal, we need to fetch the updated list of templates for this module
+	// to send back to the client so it can re-render the list.
+	updatedModule, loadErr := app.moduleManager.GetStore().LoadModule(moduleID)
+	if loadErr != nil {
+		app.logger.Error("moduleRemoveTemplateHandler: Failed to reload module after template removal", "error", loadErr, "moduleID", moduleID)
+		// If loading fails, we can't send the updated list, but the removal itself was successful.
+		// Send success for removal, but maybe with a note or empty data.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK) // Removal was successful
+		json.NewEncoder(w).Encode(jsonResponse{
+			Status:  "success",
+			Message: fmt.Sprintf("Template '%s' removed successfully, but failed to refresh list.", templateFilename),
+		})
+		return
+	}
+
+	app.logger.Info("moduleRemoveTemplateHandler: Successfully removed template", "moduleID", moduleID, "templateFilename", templateFilename)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(jsonResponse{
+		Status:  "success",
+		Message: fmt.Sprintf("Template '%s' removed successfully.", templateFilename),
+		Data:    updatedModule.Templates, // Send back the updated list
+	})
 }

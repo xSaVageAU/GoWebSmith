@@ -64,7 +64,9 @@ func (app *adminApplication) routes() http.Handler {
 	r.Post("/admin/modules/delete/{moduleID}", app.moduleDeleteHandler) // Handle delete submission
 
 	// Module Editing Route
-	r.Get("/admin/modules/edit/{moduleID}", app.moduleEditFormHandler) // Display edit form/placeholder
+	r.Get("/admin/modules/edit/{moduleID}", app.moduleEditFormHandler)                                           // Display edit form/placeholder
+	r.Post("/admin/modules/edit/{moduleID}/add-template", app.moduleAddTemplateHandler)                          // Handle adding a new template
+	r.Post("/admin/modules/edit/{moduleID}/remove-template/{templateFilename}", app.moduleRemoveTemplateHandler) // Handle removing a template
 
 	// API Route to get template content
 	r.Get("/api/admin/modules/{moduleID}/templates/{filename}", app.getModuleTemplateContentHandler)

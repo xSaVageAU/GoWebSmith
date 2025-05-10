@@ -34,15 +34,20 @@
             		                   <a href="/admin/modules/edit/{{ .ID }}" role="button" class="gws-action-link">Edit Code</a>
          
             		                   <!-- Delete Form/Button -->
-            		                   <form action="/admin/modules/delete/{{ .ID }}" method="POST" class="gws-inline-form" onsubmit="return confirm('Are you sure you want to soft-delete module \'{{ .Name }}\' (ID: {{ .ID }})?');">
-                        	<input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
-                        	<input type="hidden" name="force" value="false"> {{/* Default to soft delete */}}
-                            <button type="submit">Delete</button>
-                        </form>
-                        {{/* TODO: Add Force Delete button later */}}
-                    </td>
-                </tr>
-                {{ end }}
+            		                   <form action="/admin/modules/delete/{{ .ID }}" method="POST" class="gws-inline-form" onsubmit="return confirm('Are you sure you want to soft-delete module \'{{ .Name }}\' (ID: {{ .ID }})? This will move its files to modules_removed and mark it inactive.');">
+            		           <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+            		           <input type="hidden" name="force" value="false">
+            		              <button type="submit">Delete</button>
+            		          </form>
+            		                   <!-- Force Delete Form/Button -->
+            		                   <form action="/admin/modules/delete/{{ .ID }}" method="POST" class="gws-inline-form gws-ml-1" onsubmit="return confirm('DANGER! Are you absolutely sure you want to FORCE DELETE module \'{{ .Name }}\' (ID: {{ .ID }})? This will permanently delete all its files and metadata. This action cannot be undone.');">
+            		           <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+            		           <input type="hidden" name="force" value="true">
+            		              <button type="submit" class="btn-danger">Force Delete</button>
+            		          </form>
+            		      </td>
+            		  </tr>
+            		  {{ end }}
             </tbody>
         </table>
     {{ end }}

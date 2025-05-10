@@ -413,3 +413,80 @@ func (m *ModuleManager) PurgeRemovedModules() (purgedCount int, readErr error) {
 }
 
 // TODO: Consider if NukeAll logic belongs in the manager or stays CLI-only. (Leaning towards CLI-only)
+
+// RemoveTemplateFromModule removes a specific template file from a module and updates its metadata.
+func (m *ModuleManager) RemoveTemplateFromModule(moduleID, templateFilename string) error {
+	m.logger.Info("Attempting to remove template from module", "moduleID", moduleID, "templateFilename", templateFilename)
+
+	// 1. Load the module metadata
+	module, err := m.store.LoadModule(moduleID)
+	if err != nil {
+		m.logger.Error("Error loading module metadata for template removal", "moduleID", moduleID, "templateFilename", templateFilename, "error", err)
+		return fmt.Errorf("loading module metadata for ID %s failed: %w", moduleID, err)
+	}
+
+	// 2. Find the template in the metadata
+	templateIndex := -1
+	var templatePath string
+	for i, t := range module.Templates {
+		if t.Name == templateFilename {
+			templateIndex = i
+			// Construct the absolute path to the template file
+			// module.Directory is relative to m.modulesDir, which is relative to m.projectRoot
+			// So, the full path is projectRoot + modulesDir (if modulesDir is not absolute) + moduleID + templates + filename
+			// However, module.Directory is already modulesDir/moduleID.
+			// And m.modulesDir is already projectRoot/modules.
+			// The generator.AddTemplateToModule uses m.modulesDir as the base for moduleID/templates.
+			// So, the path should be: m.modulesDir + moduleID + "templates" + templateFilename
+			// Let's ensure module.Directory is the absolute path to the module's folder.
+			// From GenerateModuleBoilerplate: moduleDir := filepath.Join(cfg.BaseDir, moduleID)
+			// cfg.BaseDir is m.modulesDir. So module.Directory is m.modulesDir/moduleID.
+			// This path is relative to the project root if m.modulesDir is relative, or absolute if m.modulesDir is absolute.
+			// The ModuleManager's modulesDir is initialized in CLI and Admin main as filepath.Join(projectRoot, "modules").
+			// So, module.Directory is effectively projectRoot/modules/moduleID.
+			// And templatePath should be projectRoot/modules/moduleID/templates/templateFilename.
+			// model.Template.Path is "templates/filename.html"
+			templatePath = filepath.Join(module.Directory, t.Path) // t.Path is "templates/filename.html"
+			if !filepath.IsAbs(templatePath) {                     // Ensure it's absolute for os.Remove
+				templatePath = filepath.Join(m.projectRoot, templatePath)
+			}
+			break
+		}
+	}
+
+	if templateIndex == -1 {
+		m.logger.Warn("Template not found in module metadata", "moduleID", moduleID, "templateFilename", templateFilename)
+		return fmt.Errorf("template '%s' not found in metadata for module %s", templateFilename, moduleID)
+	}
+
+	// 3. Delete the physical template file
+	m.logger.Debug("Attempting to delete template file", "path", templatePath)
+	if _, err := os.Stat(templatePath); err == nil {
+		errRemove := os.Remove(templatePath)
+		if errRemove != nil {
+			m.logger.Error("Failed to delete template file", "path", templatePath, "error", errRemove)
+			// We might still want to remove it from metadata, or return error. For now, let's return.
+			return fmt.Errorf("failed to delete template file '%s': %w", templatePath, errRemove)
+		}
+		m.logger.Info("Successfully deleted template file", "path", templatePath)
+	} else if os.IsNotExist(err) {
+		m.logger.Warn("Template file not found on disk, proceeding to remove from metadata", "path", templatePath)
+	} else {
+		m.logger.Error("Error checking template file before deletion", "path", templatePath, "error", err)
+		return fmt.Errorf("failed to check template file '%s' before deletion: %w", templatePath, err)
+	}
+
+	// 4. Remove the template from the slice in metadata
+	module.Templates = append(module.Templates[:templateIndex], module.Templates[templateIndex+1:]...)
+	module.LastUpdated = time.Now()
+
+	// 5. Save the updated module metadata
+	if err := m.store.SaveModule(module); err != nil {
+		m.logger.Error("Error saving module metadata after removing template", "moduleID", moduleID, "templateFilename", templateFilename, "error", err)
+		// If saving metadata fails, the physical file might be deleted but metadata is stale.
+		return fmt.Errorf("saving updated module metadata for ID %s failed: %w", moduleID, err)
+	}
+
+	m.logger.Info("Successfully removed template from module and updated metadata", "moduleID", moduleID, "templateFilename", templateFilename)
+	return nil
+}
