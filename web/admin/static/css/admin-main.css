@@ -339,8 +339,10 @@ select {
 
 
 /* --- Dashboard Table Styling (General Theme Alignment) --- */
-#module-list table {
+#module-list table,
+#soft-deleted-module-list table {
     width: 100%;
+    table-layout: fixed; /* Crucial for consistent column widths */
     border-collapse: collapse; /* Keep this */
     margin-top: 1.5em; /* Increased top margin */
     border: 1.5px solid var(--bg-glass-border); /* Use glass border for the table outline */
@@ -351,13 +353,18 @@ select {
 }
 
 #module-list th,
-#module-list td {
+#module-list td,
+#soft-deleted-module-list th,
+#soft-deleted-module-list td {
     padding: 1em 1.25em; /* Increased padding */
     text-align: left;
     border-bottom: 1px solid var(--border-color); /* Only bottom borders for rows */
+    word-wrap: break-word; /* Allow long words/strings to break and wrap */
+    /* Removed: overflow: hidden; text-overflow: ellipsis; white-space: nowrap; */
 }
 
-#module-list th {
+#module-list th,
+#soft-deleted-module-list th {
     background-color: rgba(30, 34, 45, 0.85); /* Darker glass for header, slightly more opaque */
     color: var(--text-light); /* Brighter text for headers */
     font-weight: 600; /* Bolder header text */
@@ -366,22 +373,54 @@ select {
 }
 
 /* Remove border from the last row's cells */
-#module-list tr:last-child td {
+#module-list tr:last-child td,
+#soft-deleted-module-list tr:last-child td {
     border-bottom: none;
 }
 
 /* Add a hover effect to table rows */
-#module-list tbody tr:hover {
+#module-list tbody tr:hover,
+#soft-deleted-module-list tbody tr:hover {
     background-color: rgba(139, 92, 246, 0.08); /* Subtle primary color highlight */
 }
 
+/* Define column widths - these should add up to 100% or slightly less if there's padding/borders */
+#module-list th:nth-child(1), #module-list td:nth-child(1), /* ID */
+#soft-deleted-module-list th:nth-child(1), #soft-deleted-module-list td:nth-child(1) {
+    width: 22%;
+}
+#module-list th:nth-child(2), #module-list td:nth-child(2), /* Name */
+#soft-deleted-module-list th:nth-child(2), #soft-deleted-module-list td:nth-child(2) {
+    width: 18%;
+}
+#module-list th:nth-child(3), #module-list td:nth-child(3), /* Slug */
+#soft-deleted-module-list th:nth-child(3), #soft-deleted-module-list td:nth-child(3) {
+    width: 18%;
+}
+#module-list th:nth-child(4), #module-list td:nth-child(4), /* Status */
+#soft-deleted-module-list th:nth-child(4), #soft-deleted-module-list td:nth-child(4) {
+    width: 12%;
+}
+#module-list th:nth-child(5), #module-list td:nth-child(5), /* Templates */
+#soft-deleted-module-list th:nth-child(5), #soft-deleted-module-list td:nth-child(5) {
+    width: 10%;
+    text-align: center; /* Center template count */
+}
+#module-list th:nth-child(6), #module-list td:nth-child(6), /* Actions */
+#soft-deleted-module-list th:nth-child(6), #soft-deleted-module-list td:nth-child(6) {
+    width: 20%; /* Adjusted to ensure actions fit well */
+    /* Removed: white-space: nowrap; to allow buttons to wrap if necessary */
+}
+
 /* Style for action links within the table to make them more button-like if needed */
-#module-list .gws-action-link {
+#module-list .gws-action-link,
+#soft-deleted-module-list .gws-action-link {
     /* Using existing 'a' styles, but could be styled as small buttons if desired */
     margin-right: 0.5rem;
 }
 
-#module-list .gws-inline-form button {
+#module-list .gws-inline-form button,
+#soft-deleted-module-list .gws-inline-form button {
     /* Using existing button styles, ensure they fit well in table cells */
     padding: 0.4rem 0.8rem; /* Slightly smaller padding for table buttons */
     font-size: 0.8rem;

@@ -22,9 +22,10 @@ import (
 
 // DashboardPageData holds all data needed for the dashboard template (layout + content)
 type DashboardPageData struct {
-	CurrentYear int // Moved here for layout footer
-	Modules     []*model.Module
-	Error       string // To display errors if module loading fails
+	CurrentYear           int // Moved here for layout footer
+	ActiveInactiveModules []*model.Module
+	SoftDeletedModules    []*model.Module
+	Error                 string // To display errors if module loading fails
 }
 
 // PreviewRequestData defines the structure for the preview API request body.
@@ -39,8 +40,9 @@ func (app *adminApplication) dashboardHandler(w http.ResponseWriter, r *http.Req
 
 	// Page-specific data structure
 	pageData := DashboardPageData{
-		CurrentYear: time.Now().Year(),
-		Modules:     make([]*model.Module, 0),
+		CurrentYear:           time.Now().Year(),
+		ActiveInactiveModules: make([]*model.Module, 0),
+		SoftDeletedModules:    make([]*model.Module, 0),
 	}
 
 	if app.moduleStore == nil {
@@ -52,8 +54,14 @@ func (app *adminApplication) dashboardHandler(w http.ResponseWriter, r *http.Req
 			app.logger.Error("Failed to read modules from store", "error", err)
 			pageData.Error = "Failed to load module list."
 		} else {
-			pageData.Modules = modules
-			app.logger.Debug("Loaded modules for dashboard", "count", len(modules))
+			for _, mod := range modules {
+				if !mod.IsActive && strings.Contains(mod.Directory, "modules_removed") {
+					pageData.SoftDeletedModules = append(pageData.SoftDeletedModules, mod)
+				} else {
+					pageData.ActiveInactiveModules = append(pageData.ActiveInactiveModules, mod)
+				}
+			}
+			app.logger.Debug("Processed modules for dashboard", "active/inactive_count", len(pageData.ActiveInactiveModules), "soft_deleted_count", len(pageData.SoftDeletedModules))
 		}
 	}
 	data["Page"] = pageData // Embed page-specific data under "Page" key
