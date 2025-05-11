@@ -1,10 +1,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     // --- DOM Elements ---
-    const editorTextarea = document.getElementById('editor-content'); // Still needed for CM init
+    const editorTextarea = document.getElementById('editor-content');
     const currentFilenameSpan = document.getElementById('current-filename');
     const previewPane = document.getElementById('preview-pane');
     const saveChangesButton = document.getElementById('save-changes-button');
-    // const saveStatusSpan = document.getElementById('save-status'); // No longer used
     const editorOverlay = document.getElementById('gws-editor-overlay-container');
     const editorLayoutElement = document.querySelector('.gws-editor-layout');
     const editorResizer = document.getElementById('gws-editor-resizer');
@@ -16,7 +15,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentEditingFile = null;
     let activeListItem = null;
     let currentModuleID = editorLayoutElement ? editorLayoutElement.dataset.moduleId : null;
-    // let codeMirrorInstance = null; // No longer directly managed here
     let previewTimeout;
 
     // --- Initialization ---
@@ -35,21 +33,11 @@ document.addEventListener('DOMContentLoaded', function() {
             templateList.querySelectorAll('li[data-filename]').forEach(li => {
                 const name = li.dataset.filename;
                 const isBase = li.querySelector('.gws-base-badge') !== null;
-                serverRenderedTemplates.push({ 
-                    name: name, 
-                    isBase: isBase
-                });
+                serverRenderedTemplates.push({ name: name, isBase: isBase });
             });
         }
         
         const initialTemplatesForService = window.initialModuleTemplates || serverRenderedTemplates;
-        if (window.initialModuleTemplates) {
-            console.log("Using initialModuleTemplates from window object for FileListService.");
-        } else if (serverRenderedTemplates.length > 0) {
-            console.log("Using serverRenderedTemplates parsed from DOM for FileListService.");
-        } else {
-            console.log("No initial templates found for FileListService.");
-        }
 
         FileListService.init({
             listElement: templateList,
@@ -62,34 +50,40 @@ document.addEventListener('DOMContentLoaded', function() {
             displayMessage: displayDynamicMessage 
         });
 
-        setupEventListeners(); 
-        setupResizer();
+        EditorUIManager.init({
+            overlayElement: editorOverlay,
+            resizerElement: editorResizer
+        });
+
+        setupEventListeners();
+        // setupResizer(); // Now handled by EditorUIManager.init()
     }
 
     function checkModuleID() {
         if (!currentModuleID) {
-            console.error("Module ID not found. Ensure it's set as a data-module-id attribute on an element like .gws-editor-layout");
+            console.error("Module ID not found.");
             updateEditorState("Error: Configuration problem (Module ID missing).", true, 'Error'); 
             if(saveChangesButton) saveChangesButton.disabled = true;
-            if(editorOverlay) editorOverlay.classList.remove('visible');
+            // No direct call to editorOverlay.classList.remove here, UIManager would handle it if needed
             return false;
         }
         return true;
     }
 
-    // --- UI State Management ---
-    function showEditorOverlay() {
-        if (editorOverlay) {
-             editorOverlay.classList.add('visible');
-             setTimeout(() => { 
-                 EditorService.refresh(); 
-                 console.log("CodeMirror refreshed after showEditorOverlay.");
-             }, 10); 
-        }
+    // --- UI State Management Wrappers for EditorUIManager ---
+    function showEditorOverlayWrapper() {
+        EditorUIManager.showOverlay();
+        // Refresh CodeMirror after the overlay is made visible and transitions complete
+        setTimeout(() => { 
+            EditorService.refresh(); 
+            console.log("CodeMirror refreshed after EditorUIManager.showOverlay().");
+        }, 10); // Timeout helps ensure refresh happens after CSS transition
     }
 
-    function hideEditorOverlay() {
-        if (editorOverlay) editorOverlay.classList.remove('visible');
+    function hideEditorOverlayWrapper() {
+        EditorUIManager.hideOverlay(); // UIManager just hides the element
+
+        // admin-editor.js remains responsible for its own state management after hiding
         if (activeListItem) {
             activeListItem.classList.remove('gws-active-file');
             activeListItem = null;
@@ -128,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!filename) return;
 
         if (currentEditingFile === filename && editorOverlay && editorOverlay.classList.contains('visible')) {
-            hideEditorOverlay(); 
+            hideEditorOverlayWrapper(); 
             return;
         }
 
@@ -148,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         currentEditingFile = filename;
         updateEditorState('Loading...', true, filename); 
-        showEditorOverlay(); 
+        showEditorOverlayWrapper(); 
 
         await loadFileContent(filename);
     }
@@ -156,23 +150,19 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadFileContent(filename) {
         if (!currentModuleID) {
             updateEditorState('Error: Module ID is missing. Cannot load file.', true, filename);
-            hideEditorOverlay();
+            hideEditorOverlayWrapper();
             return;
         }
 
         try {
-            const response = await fetch(`/api/admin/modules/${currentModuleID}/templates/${filename}`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch template: ${response.status} ${response.statusText}`);
-            }
-            const content = await response.text();
+            const content = await ApiService.loadTemplateContent(currentModuleID, filename);
             updateEditorState(content, false, filename); 
             if(saveChangesButton) saveChangesButton.disabled = false;
             triggerPreview(); 
         } catch (error) {
             updateEditorState(`Error loading file: ${error.message}`, true, filename);
-            if(previewPane) previewPane.innerHTML = `<p class="gws-preview-error">Error loading file for preview.</p>`;
-            console.error("Error loading template:", error);
+            if(previewPane) previewPane.innerHTML = `<p class="gws-preview-error">Error loading file for preview: ${escapeHtml(error.message)}</p>`;
+            console.error("Error loading template via ApiService:", error);
         }
     }
 
@@ -181,20 +171,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const content = EditorService.getValue(); 
         try {
-            const response = await fetch(`/api/admin/preview/${currentModuleID}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: currentEditingFile, content: content }),
-            });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Preview failed: ${response.status} ${response.statusText} - ${errorText}`);
-            }
-            const previewHtml = await response.text();
+            const previewHtml = await ApiService.fetchPreview(currentModuleID, currentEditingFile, content);
             if(previewPane) previewPane.innerHTML = `<iframe srcdoc="${escapeHtml(previewHtml)}" style="width:100%; height:100%; border:none;"></iframe>`;
         } catch (error) {
-            if(previewPane) previewPane.innerHTML = `<p class="gws-preview-error">Preview error: ${error.message}</p>`;
-            console.error("Error triggering preview:", error);
+            if(previewPane) previewPane.innerHTML = `<p class="gws-preview-error">Preview error: ${escapeHtml(error.message)}</p>`;
+            console.error("Error triggering preview via ApiService:", error);
         }
     }
 
@@ -223,21 +204,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         try {
-            const response = await fetch(`/api/admin/modules/${currentModuleID}/templates/${currentEditingFile}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'text/plain',
-                    'X-CSRF-Token': csrfToken 
-                },
-                body: content,
-            });
-            const responseText = await response.text();
-            if (!response.ok) {
-                throw new Error(`Failed to save file: ${response.status} ${response.statusText} - ${responseText}`);
-            }
+            const responseText = await ApiService.saveTemplateContent(currentModuleID, currentEditingFile, content, csrfToken);
             displayDynamicMessage(responseText || "File saved successfully!", 'success');
         } catch (error) {
-            console.error("Error saving file:", error);
+            console.error("Error saving file via ApiService:", error);
             displayDynamicMessage(`Error: ${error.message}`, 'error');
         } finally {
             if(saveChangesButton) {
@@ -254,7 +224,7 @@ document.addEventListener('DOMContentLoaded', function() {
              .replace(/&/g, "&amp;")
              .replace(/</g, "&lt;")
              .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;") // Ensures double quotes are properly escaped
+             .replace(/"/g, "&quot;") 
              .replace(/'/g, "&#039;"); 
     }
 
@@ -315,46 +285,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (saveChangesButton) {
             saveChangesButton.addEventListener('click', saveChanges);
         }
-    }
 
-    // --- Resizer Logic Setup ---
-    function setupResizer() {
-        if (editorResizer && editorOverlay && EditorService.getInstance()) { 
-            let isResizing = false;
-            let lastDownY = 0;
-            let initialHeight = 0;
-
-            editorResizer.addEventListener('mousedown', function(e) {
-                isResizing = true;
-                lastDownY = e.clientY;
-                initialHeight = editorOverlay.offsetHeight;
-                document.addEventListener('mousemove', handleMouseMove);
-                document.addEventListener('mouseup', handleMouseUp);
-                document.body.style.userSelect = 'none';
+        // Listen for custom resize events from EditorUIManager to refresh CodeMirror
+        if (editorOverlay) {
+            editorOverlay.addEventListener('editorOverlayResized', () => {
+                EditorService.refresh();
             });
-
-            function handleMouseMove(e) {
-                if (!isResizing) return;
-                const deltaY = e.clientY - lastDownY;
-                let newHeight = initialHeight - deltaY;
-                const minHeight = 100;
-                const maxHeight = window.innerHeight * 0.8;
-                newHeight = Math.max(minHeight, Math.min(newHeight, maxHeight)); 
-                editorOverlay.style.height = newHeight + 'px';
-                EditorService.refresh(); 
-            }
-
-            function handleMouseUp() {
-                if (isResizing) {
-                    isResizing = false;
-                    document.removeEventListener('mousemove', handleMouseMove);
-                    document.removeEventListener('mouseup', handleMouseUp);
-                    document.body.style.userSelect = '';
-                    EditorService.refresh(); 
-                }
-            }
+            editorOverlay.addEventListener('editorOverlayResizeEnd', () => {
+                EditorService.refresh();
+            });
         }
     }
+
+    // setupResizer function is now removed as its logic is in EditorUIManager.init()
 
     // --- Run Application ---
     initializeApp();
