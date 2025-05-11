@@ -129,9 +129,9 @@ func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.
 	// Basic validation
 	if moduleName == "" {
 		errorMsg := "Module Name is required."
-		// Redirect back to the form with error message and original values
-		redirectURL := fmt.Sprintf("/admin/modules/new?error=%s&moduleName=%s&customSlug=%s",
-			url.QueryEscape(errorMsg),
+		app.FlashErrorMessage = errorMsg // Set flash error message
+		// Redirect back to the form, keeping original values in query params for repopulation
+		redirectURL := fmt.Sprintf("/admin/modules/new?moduleName=%s&customSlug=%s",
 			url.QueryEscape(moduleName), // will be empty but good to keep consistent
 			url.QueryEscape(customSlug))
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
@@ -146,9 +146,9 @@ func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.
 		if !isValidSlug {
 			app.logger.Warn("Invalid custom slug format provided", "customSlug", customSlug)
 			errorMsg := "Invalid Custom Slug format. Use lowercase letters, numbers, and hyphens. Must start and end with a letter or number."
-			// Redirect back to the form with error message and original values
-			redirectURL := fmt.Sprintf("/admin/modules/new?error=%s&moduleName=%s&customSlug=%s",
-				url.QueryEscape(errorMsg),
+			app.FlashErrorMessage = errorMsg // Set flash error message
+			// Redirect back to the form, keeping original values in query params for repopulation
+			redirectURL := fmt.Sprintf("/admin/modules/new?moduleName=%s&customSlug=%s",
 				url.QueryEscape(moduleName),
 				url.QueryEscape(customSlug))
 			http.Redirect(w, r, redirectURL, http.StatusSeeOther)
@@ -167,15 +167,19 @@ func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.
 	}
 
 	// 3. Call the manager's CreateModule method
-	_, err = app.moduleManager.CreateModule(moduleName, customSlug) // Use app.moduleManager
+	createdModule, err := app.moduleManager.CreateModule(moduleName, customSlug) // Use app.moduleManager
 	if err != nil {
 		app.logger.Error("Error creating module via manager", "error", err, "moduleName", moduleName, "customSlug", customSlug)
-		// TODO: Improve error handling - show error on form
-		http.Error(w, fmt.Sprintf("Failed to create module: %v", err), http.StatusInternalServerError)
+		app.FlashErrorMessage = fmt.Sprintf("Failed to create module '%s': %v", moduleName, err)
+		// Redirect back to the form, keeping original values in query params for repopulation
+		redirectURL := fmt.Sprintf("/admin/modules/new?moduleName=%s&customSlug=%s",
+			url.QueryEscape(moduleName),
+			url.QueryEscape(customSlug))
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
 	// 4. Redirect back to the dashboard (root path) on success
-	// TODO: Add flash message for success
+	app.FlashSuccessMessage = fmt.Sprintf("Module '%s' created successfully.", createdModule.Name)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -208,18 +212,28 @@ func (app *adminApplication) moduleDeleteHandler(w http.ResponseWriter, r *http.
 	}
 
 	// 4. Call the manager's DeleteModule method
+	// Attempt to load module name for better flash messages
+	// This is a best-effort; if it fails, we use the ID.
+	var moduleNameForMessage = moduleID
+	deletedModule, loadErr := app.moduleManager.GetStore().LoadModule(moduleID)
+	if loadErr == nil {
+		moduleNameForMessage = deletedModule.Name
+	}
+
 	err = app.moduleManager.DeleteModule(moduleID, forceDelete)
 	if err != nil {
 		app.logger.Error("Error deleting module via manager", "error", err, "moduleID", moduleID, "force", forceDelete)
-		// TODO: Improve error handling - show error message on dashboard using flash messages
-		// For now, just redirect back with a potential error logged server-side.
-		// We could potentially pass an error query param, but flash messages are better.
-		http.Redirect(w, r, "/", http.StatusSeeOther) // Redirect even on error for now
+		app.FlashErrorMessage = fmt.Sprintf("Failed to delete module '%s': %v", moduleNameForMessage, err)
+		http.Redirect(w, r, "/", http.StatusSeeOther) // Redirect even on error
 		return
 	}
 
 	// 5. Redirect back to the dashboard on success
-	// TODO: Add flash message for success
+	if forceDelete {
+		app.FlashSuccessMessage = fmt.Sprintf("Module '%s' (ID: %s) force deleted successfully.", moduleNameForMessage, moduleID)
+	} else {
+		app.FlashSuccessMessage = fmt.Sprintf("Module '%s' (ID: %s) soft-deleted successfully.", moduleNameForMessage, moduleID)
+	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -275,10 +289,11 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 	// Prepare data for the template
 	// Note: There isn't a specific nav item for "edit", but we pass it for potential future use or context.
 	data := app.newTemplateData(r, "edit")
-	data["CurrentYear"] = time.Now().Year()            // For layout compatibility
-	data["ModuleData"] = module                        // Pass the *model.Module object (now with sorted Templates)
-	data["PageError"] = r.URL.Query().Get("error")     // Get error from query params
-	data["PageSuccess"] = r.URL.Query().Get("success") // Get success from query params
+	data["CurrentYear"] = time.Now().Year() // For layout compatibility
+	data["ModuleData"] = module             // Pass the *model.Module object (now with sorted Templates)
+	// Removed PageError and PageSuccess from here, as flash messages are handled by layout via newTemplateData
+	// data["PageError"] = r.URL.Query().Get("error")
+	// data["PageSuccess"] = r.URL.Query().Get("success")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	err = ts.ExecuteTemplate(w, "layout.html", data) // layout.html is the entry point for cached templates

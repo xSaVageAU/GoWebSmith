@@ -22,6 +22,9 @@ type adminApplication struct {
 	projectRoot   string                        // Added project root
 	moduleManager *modulemanager.ModuleManager  // Added module manager field
 	templateCache map[string]*template.Template // Added for template caching
+	// Fields for simulated flash messages
+	FlashSuccessMessage string
+	FlashErrorMessage   string
 }
 
 // newTemplateData creates a map of data to pass to templates, including CSRF token and active nav item.
@@ -31,8 +34,18 @@ func (app *adminApplication) newTemplateData(r *http.Request, activeNav string) 
 		"CSRFToken": nosurf.Token(r),
 		"ActiveNav": activeNav, // Identifier for the current active navigation tab
 		// "CurrentYear": time.Now().Year(), // Could be added here if not page-specific
-		// Add other common data here, e.g., flash messages, authentication status
 	}
+
+	// Add flash messages to template data if they exist
+	if app.FlashSuccessMessage != "" {
+		data["FlashSuccess"] = app.FlashSuccessMessage
+		app.FlashSuccessMessage = "" // Clear after adding to data
+	}
+	if app.FlashErrorMessage != "" {
+		data["FlashError"] = app.FlashErrorMessage
+		app.FlashErrorMessage = "" // Clear after adding to data
+	}
+
 	return data
 }
 

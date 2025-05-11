@@ -209,7 +209,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function saveChanges() {
         if (!currentEditingFile || !codeMirrorInstance || codeMirrorInstance.getOption('readOnly') || !currentModuleID) {
-            alert("No file selected, editor is read-only, or Module ID is missing.");
+            // Use displayDynamicMessage for user feedback instead of alert
+            displayDynamicMessage("No file selected, editor is read-only, or Module ID is missing.", "error");
             return;
         }
 
@@ -218,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (!csrfToken) {
              console.error("CSRF token not found in data attribute.");
-             alert("Security token missing. Cannot save.");
+             displayDynamicMessage("Security token missing. Cannot save.", "error");
              // Re-enable button if needed, or handle differently
              if(saveChangesButton) {
                  saveChangesButton.textContent = 'Save Changes';
@@ -231,7 +232,7 @@ document.addEventListener('DOMContentLoaded', function() {
             saveChangesButton.textContent = 'Saving...';
             saveChangesButton.disabled = true;
         }
-        if(saveStatusSpan) saveStatusSpan.textContent = '';
+        // Removed: if(saveStatusSpan) saveStatusSpan.textContent = '';
 
         try {
             const response = await fetch(`/api/admin/modules/${currentModuleID}/templates/${currentEditingFile}`, {
@@ -246,13 +247,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok) {
                 throw new Error(`Failed to save file: ${response.status} ${response.statusText} - ${responseText}`);
             }
-            if(saveStatusSpan) {
-                 saveStatusSpan.textContent = responseText || "File saved successfully!";
-                 setTimeout(() => { if(saveStatusSpan) saveStatusSpan.textContent = ''; }, 3000);
-            }
+            // Use displayDynamicMessage for success
+            displayDynamicMessage(responseText || "File saved successfully!", 'success');
         } catch (error) {
             console.error("Error saving file:", error);
-            if(saveStatusSpan) saveStatusSpan.textContent = `Error: ${error.message}`;
+            // Use displayDynamicMessage for error
+            displayDynamicMessage(`Error: ${error.message}`, 'error');
         } finally {
             if(saveChangesButton) {
                  saveChangesButton.textContent = 'Save Changes';
@@ -425,14 +425,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function handleRemoveTemplateFormSubmit(event, templateFilename) {
-        event.preventDefault();
+        event.preventDefault(); // Always prevent default first
+
         if (!currentModuleID || !templateFilename) {
             displayDynamicMessage('Module ID or template filename is missing.', 'error');
             return;
         }
 
+        // Moved confirm dialog here
         if (!confirm(`Are you sure you want to remove the template '${templateFilename}'? This action cannot be undone.`)) {
-            return;
+            return; // Stop if user cancels
         }
 
         const form = event.target;
@@ -497,9 +499,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Attach to existing remove forms on initial load
                 const removeForm = listItem.querySelector('form.remove-template-form');
                 if (removeForm) {
-                    const filename = listItem.dataset.filename; // Get filename from parent LI
+                    // Fix closure issue by passing listItem.dataset.filename directly
+                    // or by using an IIFE, or by moving the event listener setup into a separate function.
+                    // For simplicity, we'll ensure 'filename' is correctly scoped for the event listener.
+                    const currentItemFilename = listItem.dataset.filename;
                     removeForm.addEventListener('submit', function(e) {
-                        handleRemoveTemplateFormSubmit(e, filename);
+                        handleRemoveTemplateFormSubmit(e, currentItemFilename);
                     });
                 }
             });

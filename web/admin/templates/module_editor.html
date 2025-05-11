@@ -12,8 +12,8 @@
 {{/* Removed H2 title to save vertical space */}}
 {{/* <h2>Editing Module: {{ .ModuleData.Name }} ({{ .ModuleData.ID }})</h2> */}}
 
-{{/* Display Success/Error Messages (for page load) */}}
-{{ if .PageSuccess }}
+{{/* Display Success/Error Messages (for page load) - This is now handled by layout.html */}}
+{{/* {{ if .PageSuccess }}
 <div class="gws-form-group" style="margin-bottom: 1rem;">
     <p style="padding: 0.5em; border: 1px solid var(--green); background-color: rgba(16,185,129,0.1); color: var(--green);">
         <strong>Success:</strong> {{ .PageSuccess }}
@@ -26,7 +26,7 @@
         <strong>Error:</strong> {{ .PageError }}
     </p>
 </div>
-{{ end }}
+{{ end }} */}}
 
 {{/* Container for Dynamic AJAX Messages */}}
 <div id="dynamic-message-container" style="display: none; margin-bottom: 1rem;"></div>
@@ -54,7 +54,7 @@
                     {{ .Name }}
                     {{ if .IsBase }}<span class="gws-base-badge">Base</span>{{ end }}
                 </span>
-                <form action="/admin/modules/edit/{{ $.ModuleData.ID }}/remove-template/{{ .Name }}" method="POST" class="gws-inline-form" onsubmit="return confirm('Are you sure you want to remove the template \'{{ .Name }}\' from module \'{{ $.ModuleData.Name }}\'? This will delete the file and update metadata.');" style="margin: 0;">
+                <form action="/admin/modules/edit/{{ $.ModuleData.ID }}/remove-template/{{ .Name }}" method="POST" class="gws-inline-form remove-template-form" style="margin: 0;">
                     <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
                     <button type="submit" class="btn-danger" style="font-size: 0.7rem; padding: 0.2rem 0.5rem; line-height: 1.2;">Remove</button>
                 </form>
@@ -84,7 +84,7 @@
             <h4>Editor: <span id="current-filename">No file selected</span></h4>
             <div> <!-- Wrapper for button and status -->
                 <button id="save-changes-button" disabled>Save Changes</button>
-                <span id="save-status"></span>
+                {{/* <span id="save-status"></span> */}} {{/* Removed as it's no longer used by JS */}}
             </div>
         </div>
         <div class="gws-editor-textarea-wrapper"> <!-- Added wrapper -->
