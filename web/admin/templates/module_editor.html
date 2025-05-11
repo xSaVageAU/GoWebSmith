@@ -104,6 +104,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/mode/css/css.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/mode/htmlmixed/htmlmixed.min.js"></script>
+<!-- Editor Service (must be before admin-editor.js) -->
+<script src="/static/js/editorService.js" defer></script>
+<!-- File List Service (must be before admin-editor.js) -->
+<script src="/static/js/fileListService.js" defer></script>
 <!-- Your Custom Editor JS -->
 <script src="/static/js/admin-editor.js" defer></script>
 {{ end }}

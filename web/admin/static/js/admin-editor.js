@@ -4,34 +4,72 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentFilenameSpan = document.getElementById('current-filename');
     const previewPane = document.getElementById('preview-pane');
     const saveChangesButton = document.getElementById('save-changes-button');
-    const saveStatusSpan = document.getElementById('save-status');
+    // const saveStatusSpan = document.getElementById('save-status'); // No longer used
     const editorOverlay = document.getElementById('gws-editor-overlay-container');
     const editorLayoutElement = document.querySelector('.gws-editor-layout');
     const editorResizer = document.getElementById('gws-editor-resizer');
     const templateList = document.getElementById('template-file-list');
-    const addTemplateForm = document.getElementById('add-template-form'); // Get the new form
-    const dynamicMessageContainer = document.getElementById('dynamic-message-container'); // For AJAX messages
+    const addTemplateForm = document.getElementById('add-template-form');
+    const dynamicMessageContainer = document.getElementById('dynamic-message-container');
 
     // --- State Variables ---
     let currentEditingFile = null;
     let activeListItem = null;
     let currentModuleID = editorLayoutElement ? editorLayoutElement.dataset.moduleId : null;
-    let codeMirrorInstance = null; // To hold the CodeMirror instance
+    // let codeMirrorInstance = null; // No longer directly managed here
     let previewTimeout;
 
     // --- Initialization ---
     function initializeApp() {
         if (!checkModuleID()) return;
-        codeMirrorInstance = initializeCodeMirror();
-        if (!codeMirrorInstance) return; // Stop if CM failed
-        setupEventListeners();
+        
+        const cmInstance = EditorService.init(editorTextarea);
+        if (!cmInstance) {
+            console.error("CodeMirror initialization failed via EditorService.");
+            if(saveChangesButton) saveChangesButton.disabled = true;
+            return; 
+        }
+
+        let serverRenderedTemplates = [];
+        if (templateList) {
+            templateList.querySelectorAll('li[data-filename]').forEach(li => {
+                const name = li.dataset.filename;
+                const isBase = li.querySelector('.gws-base-badge') !== null;
+                serverRenderedTemplates.push({ 
+                    name: name, 
+                    isBase: isBase
+                });
+            });
+        }
+        
+        const initialTemplatesForService = window.initialModuleTemplates || serverRenderedTemplates;
+        if (window.initialModuleTemplates) {
+            console.log("Using initialModuleTemplates from window object for FileListService.");
+        } else if (serverRenderedTemplates.length > 0) {
+            console.log("Using serverRenderedTemplates parsed from DOM for FileListService.");
+        } else {
+            console.log("No initial templates found for FileListService.");
+        }
+
+        FileListService.init({
+            listElement: templateList,
+            addFormElement: addTemplateForm,
+            moduleId: currentModuleID,
+            csrfToken: editorLayoutElement ? editorLayoutElement.dataset.csrfToken : '',
+            editorLayoutElement: editorLayoutElement, 
+            initialTemplates: initialTemplatesForService, 
+            onFileSelect: handleFileSelect, 
+            displayMessage: displayDynamicMessage 
+        });
+
+        setupEventListeners(); 
         setupResizer();
     }
 
     function checkModuleID() {
         if (!currentModuleID) {
             console.error("Module ID not found. Ensure it's set as a data-module-id attribute on an element like .gws-editor-layout");
-            updateEditorState("Error: Configuration problem (Module ID missing).", true, 'Error');
+            updateEditorState("Error: Configuration problem (Module ID missing).", true, 'Error'); 
             if(saveChangesButton) saveChangesButton.disabled = true;
             if(editorOverlay) editorOverlay.classList.remove('visible');
             return false;
@@ -39,53 +77,14 @@ document.addEventListener('DOMContentLoaded', function() {
         return true;
     }
 
-    function initializeCodeMirror() {
-        if (!editorTextarea) {
-            console.error("Textarea element #editor-content not found!");
-            return null;
-        }
-        // Ensure CodeMirror library is loaded
-        if (typeof CodeMirror === 'undefined') {
-             console.error("CodeMirror library not loaded. Check script includes.");
-             if(editorTextarea) editorTextarea.value = "Error: Code editor library failed to load.";
-             return null;
-        }
-        try {
-            const cm = CodeMirror.fromTextArea(editorTextarea, {
-                lineNumbers: true,
-                theme: 'dracula',
-                mode: 'htmlmixed', // Default mode
-                // Add other options like autoCloseBrackets, matchBrackets etc. if desired
-                // autoCloseBrackets: true,
-                // matchBrackets: true,
-            });
-            // Set initial state
-            cm.setValue('Select a file from the left to edit...');
-            cm.setOption('readOnly', true);
-            console.log("CodeMirror initialized successfully.");
-            return cm;
-        } catch (error) {
-             console.error("Failed to initialize CodeMirror:", error);
-             // Fallback or error display? For now, just log.
-             if(editorTextarea) editorTextarea.value = "Error initializing code editor.";
-             return null;
-        }
-    }
-
     // --- UI State Management ---
     function showEditorOverlay() {
         if (editorOverlay) {
              editorOverlay.classList.add('visible');
-             // Refresh CodeMirror when it becomes visible
-             if (codeMirrorInstance) {
-                 // Use setTimeout to ensure refresh happens after transition might start
-                 setTimeout(() => {
-                     try {
-                         codeMirrorInstance.refresh();
-                         console.log("CodeMirror refreshed after show.");
-                     } catch(e) { console.error("Error refreshing CodeMirror:", e); }
-                 }, 10); 
-             }
+             setTimeout(() => { 
+                 EditorService.refresh(); 
+                 console.log("CodeMirror refreshed after showEditorOverlay.");
+             }, 10); 
         }
     }
 
@@ -100,64 +99,56 @@ document.addEventListener('DOMContentLoaded', function() {
         if(saveChangesButton) saveChangesButton.disabled = true;
     }
 
-    // Updates CodeMirror content, readOnly state, filename display, and language mode
     function updateEditorState(content, isReadOnly, filename) {
         if(currentFilenameSpan) currentFilenameSpan.textContent = filename || 'No file selected';
         
-        if (codeMirrorInstance) {
-            try {
-                codeMirrorInstance.setValue(content || '');
-                codeMirrorInstance.setOption('readOnly', isReadOnly);
-                
-                // Set CodeMirror mode based on filename extension
-                let mode = 'htmlmixed'; // Default
-                if (filename) {
-                    if (filename.endsWith('.css')) {
-                        mode = 'css';
-                    } else if (filename.endsWith('.js')) {
-                        mode = 'javascript';
-                    } else if (filename.endsWith('.xml')) {
-                        mode = 'xml';
-                    } // Add more modes if needed (e.g., json)
-                }
-                codeMirrorInstance.setOption('mode', mode);
-                console.log(`CodeMirror state updated: file=${filename}, readOnly=${isReadOnly}, mode=${mode}`);
-            } catch(e) {
-                 console.error("Error updating CodeMirror state:", e);
-                 // Fallback for safety
-                 if(editorTextarea) {
-                     editorTextarea.value = content || '';
-                     editorTextarea.readOnly = isReadOnly;
-                 }
+        try {
+            EditorService.setValue(content || '');
+            EditorService.setReadOnly(isReadOnly);
+            
+            let mode = 'htmlmixed'; 
+            if (filename) {
+                if (filename.endsWith('.css')) mode = 'css';
+                else if (filename.endsWith('.js')) mode = 'javascript';
+                else if (filename.endsWith('.xml')) mode = 'xml';
             }
-        } else if (editorTextarea) { // Fallback if CodeMirror failed
-             editorTextarea.value = content || '';
-             editorTextarea.readOnly = isReadOnly;
+            EditorService.setMode(mode);
+            console.log(`Editor state updated: file=${filename}, readOnly=${isReadOnly}, mode=${mode}`);
+        } catch(e) { 
+             console.error("Error updating editor state:", e);
+             if(editorTextarea) { 
+                 editorTextarea.value = content || '';
+                 editorTextarea.readOnly = isReadOnly;
+             }
         }
     }
 
-    // --- Event Handlers ---
-    async function handleFileSelect(event) {
-        const listItem = event.currentTarget; // The clicked LI element
-        const filename = listItem.dataset.filename;
-
-        if (!filename) return; // Should not happen if listener is correct
+    // --- Event Handlers (and callbacks for services) ---
+    async function handleFileSelect(filename, listItemElement) { 
+        if (!filename) return;
 
         if (currentEditingFile === filename && editorOverlay && editorOverlay.classList.contains('visible')) {
-            hideEditorOverlay();
+            hideEditorOverlay(); 
             return;
         }
 
-        // Update active list item styling
         if (activeListItem) {
             activeListItem.classList.remove('gws-active-file');
         }
-        listItem.classList.add('gws-active-file');
-        activeListItem = listItem;
+        if (listItemElement) { 
+            listItemElement.classList.add('gws-active-file');
+            activeListItem = listItemElement;
+        } else {
+            const items = templateList ? templateList.querySelectorAll(`li[data-filename="${filename}"]`) : [];
+            if (items.length > 0) {
+                 items[0].classList.add('gws-active-file');
+                 activeListItem = items[0];
+            }
+        }
 
         currentEditingFile = filename;
-        updateEditorState('Loading...', true, filename); // Update state via function
-        showEditorOverlay();
+        updateEditorState('Loading...', true, filename); 
+        showEditorOverlay(); 
 
         await loadFileContent(filename);
     }
@@ -175,9 +166,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(`Failed to fetch template: ${response.status} ${response.statusText}`);
             }
             const content = await response.text();
-            updateEditorState(content, false, filename); // Update editor
+            updateEditorState(content, false, filename); 
             if(saveChangesButton) saveChangesButton.disabled = false;
-            triggerPreview(); // Trigger initial preview
+            triggerPreview(); 
         } catch (error) {
             updateEditorState(`Error loading file: ${error.message}`, true, filename);
             if(previewPane) previewPane.innerHTML = `<p class="gws-preview-error">Error loading file for preview.</p>`;
@@ -186,9 +177,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function triggerPreview() {
-        if (!currentEditingFile || !currentModuleID || !codeMirrorInstance) return;
+        if (!currentEditingFile || !currentModuleID || !EditorService.getInstance()) return;
 
-        const content = codeMirrorInstance.getValue(); // Get content from CodeMirror
+        const content = EditorService.getValue(); 
         try {
             const response = await fetch(`/api/admin/preview/${currentModuleID}`, {
                 method: 'POST',
@@ -208,19 +199,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function saveChanges() {
-        if (!currentEditingFile || !codeMirrorInstance || codeMirrorInstance.getOption('readOnly') || !currentModuleID) {
-            // Use displayDynamicMessage for user feedback instead of alert
+        if (!currentEditingFile || !EditorService.getInstance() || EditorService.getReadOnly() || !currentModuleID) {
             displayDynamicMessage("No file selected, editor is read-only, or Module ID is missing.", "error");
             return;
         }
 
-        const content = codeMirrorInstance.getValue(); // Get content from CodeMirror
-        const csrfToken = editorLayoutElement ? editorLayoutElement.dataset.csrfToken : ''; // Read token from data attribute
+        const content = EditorService.getValue(); 
+        const csrfToken = editorLayoutElement ? editorLayoutElement.dataset.csrfToken : ''; 
 
         if (!csrfToken) {
              console.error("CSRF token not found in data attribute.");
              displayDynamicMessage("Security token missing. Cannot save.", "error");
-             // Re-enable button if needed, or handle differently
              if(saveChangesButton) {
                  saveChangesButton.textContent = 'Save Changes';
                  saveChangesButton.disabled = false;
@@ -232,14 +221,13 @@ document.addEventListener('DOMContentLoaded', function() {
             saveChangesButton.textContent = 'Saving...';
             saveChangesButton.disabled = true;
         }
-        // Removed: if(saveStatusSpan) saveStatusSpan.textContent = '';
-
+        
         try {
             const response = await fetch(`/api/admin/modules/${currentModuleID}/templates/${currentEditingFile}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'text/plain',
-                    'X-CSRF-Token': csrfToken // Add CSRF token header
+                    'X-CSRF-Token': csrfToken 
                 },
                 body: content,
             });
@@ -247,11 +235,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok) {
                 throw new Error(`Failed to save file: ${response.status} ${response.statusText} - ${responseText}`);
             }
-            // Use displayDynamicMessage for success
             displayDynamicMessage(responseText || "File saved successfully!", 'success');
         } catch (error) {
             console.error("Error saving file:", error);
-            // Use displayDynamicMessage for error
             displayDynamicMessage(`Error: ${error.message}`, 'error');
         } finally {
             if(saveChangesButton) {
@@ -268,20 +254,19 @@ document.addEventListener('DOMContentLoaded', function() {
              .replace(/&/g, "&amp;")
              .replace(/</g, "&lt;")
              .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;") // Corrected
-             .replace(/'/g, "&#039;"); // Corrected
+             .replace(/"/g, "&quot;") // Ensures double quotes are properly escaped
+             .replace(/'/g, "&#039;"); 
     }
+
 
     function displayDynamicMessage(message, type = 'success') {
         if (!dynamicMessageContainer) {
             console.warn("Dynamic message container not found. Message:", message);
-            alert(`${type.toUpperCase()}: ${message}`); // Fallback to alert
+            alert(`${type.toUpperCase()}: ${message}`); 
             return;
         }
-        // Clear previous messages
         dynamicMessageContainer.innerHTML = '';
         const messageP = document.createElement('p');
-        // Apply classes for styling based on admin-main.css and module_editor.html
         messageP.style.padding = "0.5em";
         messageP.style.border = `1px solid var(--${type === 'error' ? 'red' : 'green'})`;
         messageP.style.backgroundColor = `rgba(${type === 'error' ? '244,63,94,0.1' : '16,185,129,0.1'})`;
@@ -294,242 +279,32 @@ document.addEventListener('DOMContentLoaded', function() {
         
         dynamicMessageContainer.appendChild(messageP);
         dynamicMessageContainer.style.display = 'block';
-        dynamicMessageContainer.style.marginBottom = '1rem'; // Match existing message style
+        dynamicMessageContainer.style.marginBottom = '1rem'; 
 
         setTimeout(() => {
             if (dynamicMessageContainer) {
                 dynamicMessageContainer.style.display = 'none';
                 dynamicMessageContainer.innerHTML = '';
             }
-        }, 5000); // Hide after 5 seconds
+        }, 5000); 
     }
 
-    function renderTemplateList(templates) {
-        if (!templateList) {
-            console.error("templateList element not found for rendering.");
-            return;
-        }
-        templateList.innerHTML = ''; // Clear existing list
-
-        if (!templates || templates.length === 0) {
-            const li = document.createElement('li');
-            li.textContent = 'No templates found for this module.';
-            templateList.appendChild(li);
-            return;
-        }
-
-        templates.forEach(tmpl => {
-            const li = document.createElement('li');
-            li.dataset.filename = tmpl.name; // CORRECTED: Use tmpl.name (from JSON)
-            
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = tmpl.name; // CORRECTED: Use tmpl.name
-            
-            if (tmpl.isBase) { // CORRECTED: Use tmpl.isBase (from JSON)
-                const badge = document.createElement('span');
-                badge.className = 'gws-base-badge';
-                badge.textContent = 'Base';
-                nameSpan.appendChild(badge);
-            }
-            li.appendChild(nameSpan);
-            
-            // Add Remove button/form (as per existing HTML structure for consistency)
-            const removeForm = document.createElement('form');
-            removeForm.action = `/admin/modules/edit/${currentModuleID}/remove-template/${tmpl.name}`; // CORRECTED: Use tmpl.name
-            removeForm.method = 'POST';
-            removeForm.className = 'gws-inline-form remove-template-form';
-            removeForm.style.margin = '0';
-            
-            // Attach the AJAX handler directly
-            removeForm.addEventListener('submit', function(e) {
-                handleRemoveTemplateFormSubmit(e, tmpl.name);
-            });
-
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrf_token';
-            csrfInput.value = editorLayoutElement ? editorLayoutElement.dataset.csrfToken : '';
-            removeForm.appendChild(csrfInput);
-
-            const removeButton = document.createElement('button');
-            removeButton.type = 'submit';
-            removeButton.className = 'btn-danger';
-            removeButton.style.fontSize = '0.7rem';
-            removeButton.style.padding = '0.2rem 0.5rem';
-            removeButton.style.lineHeight = '1.2';
-            removeButton.textContent = 'Remove';
-            removeForm.appendChild(removeButton);
-            
-            li.appendChild(removeForm);
-            li.style.display = 'flex';
-            li.style.justifyContent = 'space-between';
-            li.style.alignItems = 'center';
-
-            // Re-attach event listener for file selection to the LI element
-            // Ensure clicking on the form/button doesn't trigger file select
-            li.addEventListener('click', function(event) {
-                if (event.target.closest('form.remove-template-form')) {
-                    return;
-                }
-                handleFileSelect(event);
-            });
-            
-            templateList.appendChild(li);
-        });
-    }
-
-    async function handleAddTemplateFormSubmit(event) {
-        event.preventDefault();
-        if (!addTemplateForm || !currentModuleID) {
-            console.error("Add template form or module ID not found.");
-            return;
-        }
-
-        const formData = new FormData(addTemplateForm);
-        const newTemplateName = formData.get('new_template_name');
-        // CSRF token is already part of formData if the hidden input is named 'csrf_token'
-        // const csrfToken = formData.get('csrf_token');
-
-        if (!newTemplateName) {
-            displayDynamicMessage('New template name cannot be empty.', 'error');
-            return;
-        }
-        
-        const submitButton = addTemplateForm.querySelector('button[type="submit"]');
-        if(submitButton) submitButton.disabled = true;
-
-        try {
-            const response = await fetch(`/admin/modules/edit/${currentModuleID}/add-template`, {
-                method: 'POST',
-                // No need to set X-CSRF-Token header if it's in the form body and nosurf checks form body
-                body: new URLSearchParams(formData) // Sends as x-www-form-urlencoded
-            });
-
-            const result = await response.json(); // Expecting JSON response
-
-            if (response.ok && result.status === 'success') {
-                displayDynamicMessage(result.message || 'Template added successfully!', 'success');
-                if (result.data && Array.isArray(result.data)) {
-                    renderTemplateList(result.data); // result.data should be the updated list of templates
-                }
-                addTemplateForm.reset(); // Clear the form input
-            } else {
-                displayDynamicMessage(result.message || `Failed to add template (HTTP ${response.status})`, 'error');
-            }
-        } catch (error) {
-            console.error('Error adding template:', error);
-            displayDynamicMessage('An unexpected error occurred while adding the template.', 'error');
-        } finally {
-            if(submitButton) submitButton.disabled = false;
-        }
-    }
-
-    async function handleRemoveTemplateFormSubmit(event, templateFilename) {
-        event.preventDefault(); // Always prevent default first
-
-        if (!currentModuleID || !templateFilename) {
-            displayDynamicMessage('Module ID or template filename is missing.', 'error');
-            return;
-        }
-
-        // Moved confirm dialog here
-        if (!confirm(`Are you sure you want to remove the template '${templateFilename}'? This action cannot be undone.`)) {
-            return; // Stop if user cancels
-        }
-
-        const form = event.target;
-        const csrfToken = form.querySelector('input[name="csrf_token"]').value;
-
-        if (!csrfToken) {
-            displayDynamicMessage('CSRF token missing. Cannot remove template.', 'error');
-            return;
-        }
-        
-        const submitButton = form.querySelector('button[type="submit"]');
-        if(submitButton) submitButton.disabled = true;
-
-        try {
-            const response = await fetch(`/admin/modules/edit/${currentModuleID}/remove-template/${templateFilename}`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-Token': csrfToken,
-                    // Content-Type is not strictly needed for POST with no body if server doesn't require it,
-                    // but for consistency with form submissions that might have bodies:
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                // No body needed for this specific remove operation as info is in URL & CSRF in header/form
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.status === 'success') {
-                displayDynamicMessage(result.message || `Template '${templateFilename}' removed successfully.`, 'success');
-                if (result.data && Array.isArray(result.data)) {
-                    renderTemplateList(result.data);
-                } else {
-                    // If data isn't returned, we might need to manually remove the item or re-fetch
-                    // For now, assume data is returned. If not, this part needs adjustment.
-                    console.warn("Updated template list not received in remove response, list may be stale until refresh.");
-                }
-            } else {
-                displayDynamicMessage(result.message || `Failed to remove template '${templateFilename}'.`, 'error');
-            }
-        } catch (error) {
-            console.error('Error removing template:', error);
-            displayDynamicMessage(`An unexpected error occurred while removing '${templateFilename}'.`, 'error');
-        } finally {
-             if(submitButton) submitButton.disabled = false;
-        }
-    }
-
+    // renderTemplateList, handleAddTemplateFormSubmit, handleRemoveTemplateFormSubmit are now in FileListService
 
     // --- Event Listener Setup ---
     function setupEventListeners() {
-        // File list item clicks - initial setup for LIs already in HTML
-        // renderTemplateList will re-attach these to dynamically generated LIs
-        if (templateList) {
-            templateList.querySelectorAll('li[data-filename]').forEach(listItem => {
-                listItem.addEventListener('click', function(event) {
-                    if (event.target.closest('form.remove-template-form')) {
-                        return;
-                    }
-                    handleFileSelect(event);
-                });
-
-                // Attach to existing remove forms on initial load
-                const removeForm = listItem.querySelector('form.remove-template-form');
-                if (removeForm) {
-                    // Fix closure issue by passing listItem.dataset.filename directly
-                    // or by using an IIFE, or by moving the event listener setup into a separate function.
-                    // For simplicity, we'll ensure 'filename' is correctly scoped for the event listener.
-                    const currentItemFilename = listItem.dataset.filename;
-                    removeForm.addEventListener('submit', function(e) {
-                        handleRemoveTemplateFormSubmit(e, currentItemFilename);
-                    });
-                }
-            });
-        } else {
-             console.error("Template list #template-file-list not found!");
-        }
-
-        // Add Template Form Submission
-        if (addTemplateForm) {
-            addTemplateForm.addEventListener('submit', handleAddTemplateFormSubmit);
-        } else {
-            console.warn("Add template form #add-template-form not found! Ensure it has id='add-template-form'.");
-        }
+        // File list item click listeners and add/remove form event listeners 
+        // are now primarily handled by FileListService.init()
 
         // CodeMirror changes for preview debounce
-        if (codeMirrorInstance) {
-            codeMirrorInstance.on('change', () => {
+        if (EditorService.getInstance()) { 
+            EditorService.onInputChange(() => { 
                 clearTimeout(previewTimeout);
-                // Only trigger preview if the editor isn't read-only (i.e., content loaded)
-                if (!codeMirrorInstance.getOption('readOnly')) { 
-                    previewTimeout = setTimeout(triggerPreview, 750); // Debounce
+                if (!EditorService.getReadOnly()) { 
+                    previewTimeout = setTimeout(triggerPreview, 750); 
                 }
             });
-        } else if (editorTextarea) { // Fallback if CM failed
-             // Keep original keyup listener if CM failed
+        } else if (editorTextarea) { 
              editorTextarea.addEventListener('keyup', () => {
                  clearTimeout(previewTimeout);
                  previewTimeout = setTimeout(triggerPreview, 750);
@@ -544,7 +319,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Resizer Logic Setup ---
     function setupResizer() {
-        if (editorResizer && editorOverlay && codeMirrorInstance) { // Check CM instance too
+        if (editorResizer && editorOverlay && EditorService.getInstance()) { 
             let isResizing = false;
             let lastDownY = 0;
             let initialHeight = 0;
@@ -564,9 +339,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 let newHeight = initialHeight - deltaY;
                 const minHeight = 100;
                 const maxHeight = window.innerHeight * 0.8;
-                newHeight = Math.max(minHeight, Math.min(newHeight, maxHeight)); // Clamp height
+                newHeight = Math.max(minHeight, Math.min(newHeight, maxHeight)); 
                 editorOverlay.style.height = newHeight + 'px';
-                codeMirrorInstance.refresh(); // Refresh CM during resize
+                EditorService.refresh(); 
             }
 
             function handleMouseUp() {
@@ -575,7 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.removeEventListener('mousemove', handleMouseMove);
                     document.removeEventListener('mouseup', handleMouseUp);
                     document.body.style.userSelect = '';
-                    codeMirrorInstance.refresh(); // Final refresh after resize
+                    EditorService.refresh(); 
                 }
             }
         }
