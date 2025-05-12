@@ -62,26 +62,51 @@ func newTemplateCache(projectRoot string) (map[string]*template.Template, error)
 
 	// Path to the admin templates directory
 	adminTemplatesDir := filepath.Join(projectRoot, "web", "admin", "templates")
+	partialsDir := filepath.Join(adminTemplatesDir, "partials")
 
+	// First, glob all partial files. These will be included with each page
+	// and also cached individually if they need to be rendered standalone.
+	partialFiles, err := filepath.Glob(filepath.Join(partialsDir, "*.html"))
+	if err != nil {
+		return nil, fmt.Errorf("error globbing partials: %w", err)
+	}
+
+	// Process main pages
 	for _, page := range pages {
-		name := page // Use the filename as the key in the cache
+		name := page // Use the page filename as the key in the cache
 
-		// Create a new template set.
-		// Add any functions if you have them (e.g., .Funcs(functions))
-		// Parse the base layout template first.
-		ts, err := template.ParseFiles(filepath.Join(adminTemplatesDir, "layout.html"))
-		if err != nil {
-			return nil, fmt.Errorf("error parsing layout template: %w", err)
+		// Create a slice of files to parse for this page: layout, the page itself, and all partials.
+		filesToParse := []string{
+			filepath.Join(adminTemplatesDir, "layout.html"),
+			filepath.Join(adminTemplatesDir, page),
 		}
+		filesToParse = append(filesToParse, partialFiles...) // Add all found partials
 
-		// Parse the specific page template, adding it to the set.
-		// The page template should define blocks that layout.html expects (e.g., "content", "extra_css").
-		ts, err = ts.ParseFiles(filepath.Join(adminTemplatesDir, page))
+		// Parse all files into a single template set for this page.
+		// The first file in the slice becomes the 'master' template for the set.
+		ts, err := template.ParseFiles(filesToParse...)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing page template %s: %w", page, err)
+			return nil, fmt.Errorf("error parsing page template set for %s: %w", page, err)
 		}
 		cache[name] = ts
 	}
+
+	// Additionally, cache partials individually so they can be executed directly by handlers.
+	// This is important for HTMX partial responses that are not part of a full page render.
+	for _, partialFile := range partialFiles {
+		name := filepath.Base(partialFile) // e.g., "template_list_items.html"
+
+		// Parse the partial file individually.
+		ts, err := template.ParseFiles(partialFile)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing standalone partial template %s: %w", name, err)
+		}
+		// If a partial with this name was already added via a page's template set,
+		// this individual parsing might overwrite it or be redundant if the content is identical.
+		// However, for direct execution, we need it parsed as the primary template in its set.
+		cache[name] = ts
+	}
+
 	return cache, nil
 }
 

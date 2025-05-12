@@ -18,6 +18,7 @@ import (
 	"go-module-builder/internal/model" // Import model package
 
 	"github.com/go-chi/chi/v5"
+	"github.com/justinas/nosurf"
 )
 
 // DashboardPageData holds all data needed for the dashboard template (layout + content)
@@ -188,53 +189,133 @@ func (app *adminApplication) moduleDeleteHandler(w http.ResponseWriter, r *http.
 	// 1. Get module ID from URL parameter
 	moduleID := chi.URLParam(r, "moduleID")
 	if moduleID == "" {
-		app.logger.Error("Module ID missing from URL in delete request")
-		http.Error(w, "Bad Request - Missing Module ID", http.StatusBadRequest)
+		app.logger.Error("moduleDeleteHandler: Module ID missing from URL")
+		errorMessage := "Bad Request - Missing Module ID"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// 2. Parse form data to check for 'force' flag (optional)
-	// Even though it's a POST, ParseForm handles query params too if needed,
-	// but we expect it in the POST body from the hidden input.
 	err := r.ParseForm()
 	if err != nil {
-		app.logger.Error("Error parsing delete module form", "error", err, "moduleID", moduleID)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		app.logger.Error("moduleDeleteHandler: Error parsing delete module form", "error", err, "moduleID", moduleID)
+		errorMessage := "Bad Request - Could not parse form"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
-	forceDelete := r.PostForm.Get("force") == "true" // Check if force=true was submitted
+	forceDelete := r.PostForm.Get("force") == "true"
 
-	// 3. Check module manager initialization
 	if app.moduleManager == nil {
-		app.logger.Error("ModuleManager not initialized in admin application")
-		http.Error(w, "Internal Server Error - Configuration Error", http.StatusInternalServerError)
+		app.logger.Error("moduleDeleteHandler: ModuleManager not initialized")
+		errorMessage := "Internal Server Error - Configuration Error"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// 4. Call the manager's DeleteModule method
-	// Attempt to load module name for better flash messages
-	// This is a best-effort; if it fails, we use the ID.
 	var moduleNameForMessage = moduleID
-	deletedModule, loadErr := app.moduleManager.GetStore().LoadModule(moduleID)
+	// Try to get module name before deletion for a more user-friendly message.
+	// This is best-effort; if it fails, we'll use the ID.
+	moduleToDelete, loadErr := app.moduleManager.GetStore().LoadModule(moduleID)
 	if loadErr == nil {
-		moduleNameForMessage = deletedModule.Name
+		moduleNameForMessage = moduleToDelete.Name
+	} else {
+		app.logger.Warn("moduleDeleteHandler: Could not load module before deletion for name", "moduleID", moduleID, "error", loadErr)
+		// If module doesn't exist, DeleteModule will also likely fail, which is handled next.
 	}
 
 	err = app.moduleManager.DeleteModule(moduleID, forceDelete)
 	if err != nil {
-		app.logger.Error("Error deleting module via manager", "error", err, "moduleID", moduleID, "force", forceDelete)
-		app.FlashErrorMessage = fmt.Sprintf("Failed to delete module '%s': %v", moduleNameForMessage, err)
-		http.Redirect(w, r, "/", http.StatusSeeOther) // Redirect even on error
+		app.logger.Error("moduleDeleteHandler: Error deleting module via manager", "error", err, "moduleID", moduleID, "force", forceDelete)
+		errorMessage := fmt.Sprintf("Failed to delete module '%s': %v", moduleNameForMessage, err)
+		escapedErrorMessage, _ := json.Marshal(errorMessage)
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// 5. Redirect back to the dashboard on success
-	if forceDelete {
-		app.FlashSuccessMessage = fmt.Sprintf("Module '%s' (ID: %s) force deleted successfully.", moduleNameForMessage, moduleID)
-	} else {
-		app.FlashSuccessMessage = fmt.Sprintf("Module '%s' (ID: %s) soft-deleted successfully.", moduleNameForMessage, moduleID)
+	// Successfully deleted, now prepare the updated dashboard partial.
+	// Fetch all modules again to reflect the deletion.
+	allModules, err := app.moduleStore.ReadAll()
+	if err != nil {
+		// This is a tricky case: deletion succeeded, but we can't refresh the list for the client.
+		// Send a success message for deletion, but also an error/warning about the list refresh.
+		app.logger.Error("moduleDeleteHandler: Module deleted, but failed to read all modules for refresh", "error", err, "moduleID", moduleID)
+		successMessage := ""
+		if forceDelete {
+			successMessage = fmt.Sprintf("Module '%s' (ID: %s) force deleted successfully. However, the dashboard list could not be refreshed automatically.", moduleNameForMessage, moduleID)
+		} else {
+			successMessage = fmt.Sprintf("Module '%s' (ID: %s) soft-deleted successfully. However, the dashboard list could not be refreshed automatically.", moduleNameForMessage, moduleID)
+		}
+		// Send as a "warning" or "success" type? Let's use success for the primary action.
+		escapedSuccessMessage, _ := json.Marshal(successMessage)
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "success"}}`, string(escapedSuccessMessage))
+		w.Header().Set("HX-Trigger", triggerEvent)
+		// HX-Reswap: none is important here because we don't have the new list to send.
+		// The client will see the success message, but the list won't update until next full page load.
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
+		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+
+	// Prepare data for the dashboard partial
+	dashboardPageData := DashboardPageData{
+		CurrentYear:           time.Now().Year(), // Though not directly used by module_dashboard_lists.html, good for consistency if it were.
+		ActiveInactiveModules: make([]*model.Module, 0),
+		SoftDeletedModules:    make([]*model.Module, 0),
+	}
+	for _, mod := range allModules {
+		if !mod.IsActive && strings.Contains(mod.Directory, "modules_removed") {
+			dashboardPageData.SoftDeletedModules = append(dashboardPageData.SoftDeletedModules, mod)
+		} else {
+			dashboardPageData.ActiveInactiveModules = append(dashboardPageData.ActiveInactiveModules, mod)
+		}
+	}
+
+	// Data to pass to the partial template. The partial expects ".Page" and ".CSRFToken"
+	partialData := map[string]any{
+		"Page":      dashboardPageData,
+		"CSRFToken": nosurf.Token(r),
+	}
+
+	tmpl, ok := app.templateCache["module_dashboard_lists.html"]
+	if !ok {
+		app.logger.Error("moduleDeleteHandler: Partial template 'module_dashboard_lists.html' not found in cache")
+		errorMessage := "Internal Server Error - UI component missing after delete"
+		escapedErrorMessage, _ := json.Marshal(errorMessage)
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Prepare success flash message
+	flashMessage := ""
+	if forceDelete {
+		flashMessage = fmt.Sprintf("Module '%s' (ID: %s) force deleted successfully.", moduleNameForMessage, moduleID)
+	} else {
+		flashMessage = fmt.Sprintf("Module '%s' (ID: %s) soft-deleted successfully.", moduleNameForMessage, moduleID)
+	}
+	successTriggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "success"}}`, flashMessage)
+	w.Header().Set("HX-Trigger", successTriggerEvent)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	err = tmpl.Execute(w, partialData)
+	if err != nil {
+		app.logger.Error("moduleDeleteHandler: Error executing dashboard partial template", "error", err)
+		// Avoid writing header again if already sent
+	}
 }
 
 // moduleEditFormHandler loads module data and renders the editor page.
@@ -645,78 +726,118 @@ type jsonResponse struct {
 }
 
 // moduleAddTemplateHandler handles the submission for adding a new template to a module.
-// It now returns JSON instead of redirecting.
+// It now returns an HTML partial for HTMX.
 func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *http.Request) {
 	moduleID := chi.URLParam(r, "moduleID")
 	if moduleID == "" {
 		app.logger.Error("moduleAddTemplateHandler: Module ID missing from URL")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Bad Request - Missing Module ID"})
+		errorMessage := "Bad Request - Missing Module ID"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK) // Send 200 OK so HX-Trigger is processed
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
 		app.logger.Error("moduleAddTemplateHandler: Error parsing form data", "error", err, "moduleID", moduleID)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Bad Request - Could not parse form"})
+		errorMessage := "Bad Request - Could not parse form"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	newTemplateName := r.PostForm.Get("new_template_name")
 	if newTemplateName == "" {
 		app.logger.Warn("moduleAddTemplateHandler: New template name is required", "moduleID", moduleID)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "New template name cannot be empty."})
+		errorMessage := "New template name cannot be empty."
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if strings.Contains(newTemplateName, "/") || strings.Contains(newTemplateName, "\\") {
 		app.logger.Warn("moduleAddTemplateHandler: Invalid characters in template name", "templateName", newTemplateName, "moduleID", moduleID)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Template name cannot contain slashes."})
+		errorMessage := "Template name cannot contain slashes."
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	if !strings.HasSuffix(newTemplateName, ".html") && !strings.HasSuffix(newTemplateName, ".css") && !strings.HasSuffix(newTemplateName, ".tmpl") && !strings.HasSuffix(newTemplateName, ".js") {
 		app.logger.Warn("moduleAddTemplateHandler: Suspicious template extension", "templateName", newTemplateName, "moduleID", moduleID)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Template name should have a common extension (e.g., .html, .css, .tmpl, .js)."})
+		errorMessage := "Template name should have a common extension (e.g., .html, .css, .tmpl, .js)."
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if app.moduleManager == nil {
 		app.logger.Error("moduleAddTemplateHandler: ModuleManager not initialized")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Internal Server Error - Configuration Error"})
+		errorMessage := "Internal Server Error - Configuration Error"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	addedModule, err := app.moduleManager.AddTemplate(moduleID, newTemplateName)
 	if err != nil {
 		app.logger.Error("moduleAddTemplateHandler: Error adding template via manager", "error", err, "moduleID", moduleID, "templateName", newTemplateName)
-		w.Header().Set("Content-Type", "application/json")
-		// Determine if the error is a user-facing one (like duplicate) or a server error
-		// For now, assume 500 for any manager error, but this could be refined.
-		// If err is a specific type indicating "already exists", could return http.StatusConflict (409)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: fmt.Sprintf("Failed to add template: %v", err)})
+		errorMessage := fmt.Sprintf("Failed to add template: %v", err)
+		// Escape the error message for JSON, as it might contain special characters
+		escapedErrorMessage, _ := json.Marshal(errorMessage) // Use Marshal to get a JSON string literal
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	app.logger.Info("moduleAddTemplateHandler: Successfully added template", "moduleID", moduleID, "templateName", newTemplateName)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	// Send back the updated list of templates for the JS to re-render the list
-	json.NewEncoder(w).Encode(jsonResponse{
-		Status:  "success",
-		Message: fmt.Sprintf("Template '%s' added successfully.", newTemplateName),
-		Data:    addedModule.Templates,
-	})
+	app.logger.Info("moduleAddTemplateHandler: Successfully added template, preparing HTML partial", "moduleID", moduleID, "templateName", newTemplateName)
+
+	// Prepare data for the partial template
+	partialData := map[string]any{
+		"Templates": addedModule.Templates,
+		"ModuleID":  moduleID,
+		"CSRFToken": nosurf.Token(r),
+	}
+
+	// Retrieve the cached partial template
+	tmpl, ok := app.templateCache["template_list_items.html"]
+	if !ok {
+		app.logger.Error("moduleAddTemplateHandler: Partial template 'template_list_items.html' not found in cache")
+		// Fallback or internal error handling if partial is missing
+		// For now, send a generic internal server error; ideally, this shouldn't happen if caching is correct.
+		errorMessage := "Internal Server Error - UI component missing"
+		escapedErrorMessage, _ := json.Marshal(errorMessage)
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Prepare success message for HX-Trigger
+	successMessage := fmt.Sprintf("Template '%s' added successfully.", newTemplateName)
+	triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "success"}}`, successMessage)
+	w.Header().Set("HX-Trigger", triggerEvent)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK) // Success
+	err = tmpl.Execute(w, partialData)
+	if err != nil {
+		app.logger.Error("moduleAddTemplateHandler: Error executing template list partial", "error", err)
+		// Avoid writing header again if already sent
+	}
 }
 
 // moduleRemoveTemplateHandler handles the submission for removing a template from a module.
@@ -727,18 +848,22 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 
 	if moduleID == "" || templateFilename == "" {
 		app.logger.Error("moduleRemoveTemplateHandler: Module ID or Template Filename missing from URL")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Bad Request - Missing Module ID or Template Filename"})
+		errorMessage := "Bad Request - Missing Module ID or Template Filename"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	// Ensure it's a POST request (nosurf should handle CSRF token from form body)
 	if r.Method != http.MethodPost {
 		app.logger.Warn("moduleRemoveTemplateHandler: Invalid request method", "method", r.Method)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Method Not Allowed"})
+		errorMessage := "Method Not Allowed"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -746,26 +871,33 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 	// even if we don't directly use other form values here.
 	if err := r.ParseForm(); err != nil {
 		app.logger.Error("moduleRemoveTemplateHandler: Error parsing form for CSRF", "error", err, "moduleID", moduleID)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Bad Request - Could not parse form"})
+		errorMessage := "Bad Request - Could not parse form"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if app.moduleManager == nil {
 		app.logger.Error("moduleRemoveTemplateHandler: ModuleManager not initialized")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: "Internal Server Error - Configuration Error"})
+		errorMessage := "Internal Server Error - Configuration Error"
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	err := app.moduleManager.RemoveTemplateFromModule(moduleID, templateFilename)
 	if err != nil {
 		app.logger.Error("moduleRemoveTemplateHandler: Error removing template via manager", "error", err, "moduleID", moduleID, "templateFilename", templateFilename)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError) // Or a more specific error like 404 if template not found by manager
-		json.NewEncoder(w).Encode(jsonResponse{Status: "error", Message: fmt.Sprintf("Failed to remove template '%s': %v", templateFilename, err)})
+		errorMessage := fmt.Sprintf("Failed to remove template '%s': %v", templateFilename, err)
+		escapedErrorMessage, _ := json.Marshal(errorMessage)
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -774,23 +906,54 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 	updatedModule, loadErr := app.moduleManager.GetStore().LoadModule(moduleID)
 	if loadErr != nil {
 		app.logger.Error("moduleRemoveTemplateHandler: Failed to reload module after template removal", "error", loadErr, "moduleID", moduleID)
-		// If loading fails, we can't send the updated list, but the removal itself was successful.
-		// Send success for removal, but maybe with a note or empty data.
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK) // Removal was successful
-		json.NewEncoder(w).Encode(jsonResponse{
-			Status:  "success",
-			Message: fmt.Sprintf("Template '%s' removed successfully, but failed to refresh list.", templateFilename),
-		})
+		// The removal was successful, but the list couldn't be refreshed to send back.
+		// Send a success message for the removal, but also indicate the refresh issue.
+		// This is a mixed case, still send 200 OK and HX-Trigger, but the message reflects the partial success/issue.
+		// For simplicity, we'll still send the HX-Trigger for success of removal, and the client won't get an updated list.
+		// A more advanced solution might involve a different event or specific client handling.
+		// For now, we will send the success message for removal, and the client will see the old list until next refresh.
+		// OR, we can send an error message that the list couldn't be refreshed.
+		// Let's opt for an error message that the list couldn't be refreshed, as the primary action of this handler is to provide the updated list.
+		errorMessage := fmt.Sprintf("Template '%s' removed, but failed to refresh list for display.", templateFilename)
+		escapedErrorMessage, _ := json.Marshal(errorMessage)
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	app.logger.Info("moduleRemoveTemplateHandler: Successfully removed template", "moduleID", moduleID, "templateFilename", templateFilename)
-	w.Header().Set("Content-Type", "application/json")
+	app.logger.Info("moduleRemoveTemplateHandler: Successfully removed template, preparing HTML partial", "moduleID", moduleID, "templateFilename", templateFilename)
+
+	partialData := map[string]any{
+		"Templates": updatedModule.Templates,
+		"ModuleID":  moduleID,
+		"CSRFToken": nosurf.Token(r),
+	}
+
+	// Retrieve the cached partial template
+	tmpl, ok := app.templateCache["template_list_items.html"]
+	if !ok {
+		app.logger.Error("moduleRemoveTemplateHandler: Partial template 'template_list_items.html' not found in cache")
+		errorMessage := "Internal Server Error - UI component missing on remove"
+		escapedErrorMessage, _ := json.Marshal(errorMessage)
+		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
+		w.Header().Set("HX-Trigger", triggerEvent)
+		w.Header().Set("HX-Reswap", "none")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Prepare success message for HX-Trigger
+	successMessage := fmt.Sprintf("Template '%s' removed successfully.", templateFilename)
+	triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "success"}}`, successMessage)
+	w.Header().Set("HX-Trigger", triggerEvent)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(jsonResponse{
-		Status:  "success",
-		Message: fmt.Sprintf("Template '%s' removed successfully.", templateFilename),
-		Data:    updatedModule.Templates, // Send back the updated list
-	})
+	err = tmpl.Execute(w, partialData)
+	if err != nil {
+		app.logger.Error("moduleRemoveTemplateHandler: Error executing template list partial", "error", err)
+		// Avoid writing header again if already sent
+	}
 }

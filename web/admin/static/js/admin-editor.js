@@ -295,6 +295,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 EditorService.refresh();
             });
         }
+
+        // Listen for custom event triggered by HTMX HX-Trigger
+        // Prefer listening on a specific container if possible, or document as a fallback.
+        // Using document to ensure the event is caught regardless of where HTMX dispatches it.
+        document.addEventListener('showMessage', function(event) {
+            // Access the properties directly from event.detail, based on console log
+            if (event.detail && event.detail.message && event.detail.type) {
+                displayDynamicMessage(event.detail.message, event.detail.type);
+            } else {
+                console.warn("showMessage event triggered without sufficient detail (expected event.detail.message and event.detail.type):", event.detail);
+            }
+        });
     }
 
     // setupResizer function is now removed as its logic is in EditorUIManager.init()

@@ -38,7 +38,11 @@
         <h4>Templates</h4>
 
         {{/* Form to Add New Template */}}
-        <form id="add-template-form" action="/admin/modules/edit/{{ .ModuleData.ID }}/add-template" method="POST" class="gws-form-group" style="margin-bottom: 1rem;">
+        <form id="add-template-form"
+              hx-post="/admin/modules/edit/{{ .ModuleData.ID }}/add-template"
+              hx-target="#template-file-list"
+              hx-swap="innerHTML"
+              class="gws-form-group" style="margin-bottom: 1rem;">
             <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
             <div>
                 <label for="new_template_name" style="font-size: 0.8rem; margin-bottom: 0.25rem;">New Template Filename:</label>

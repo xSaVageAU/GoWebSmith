@@ -45,15 +45,24 @@ const FileListService = (function() {
             li.appendChild(nameSpan); // Append nameSpan (which might contain badge) to li
             
             const removeForm = document.createElement('form');
+            // Action and method are still useful for non-JS fallback, though HTMX will override
             removeForm.action = `/admin/modules/edit/${currentModuleId}/remove-template/${tmpl.name}`;
             removeForm.method = 'POST';
-            removeForm.className = 'gws-inline-form remove-template-form'; // Keep class for potential styling
+            removeForm.className = 'gws-inline-form remove-template-form';
             removeForm.style.margin = '0';
+
+            // Add HTMX attributes for AJAX submission
+            removeForm.setAttribute('hx-post', `/admin/modules/edit/${currentModuleId}/remove-template/${tmpl.name}`);
+            removeForm.setAttribute('hx-target', '#template-file-list');
+            removeForm.setAttribute('hx-swap', 'innerHTML');
+            removeForm.setAttribute('hx-confirm', `Are you sure you want to remove the template '${tmpl.name}'? This action cannot be undone.`);
             
-            removeForm.addEventListener('submit', function(e) {
-                // Pass the event and filename to the handler now part of this service
-                handleRemoveTemplateFormSubmit(e, tmpl.name); 
-            });
+            // The JS submit handler (handleRemoveTemplateFormSubmit) will be modified/removed later
+            // as HTMX will now handle the submission. For now, let's keep it to see if HTMX intercepts.
+            // If HTMX intercepts, this JS listener might not be fully executed or its fetch part will be problematic.
+            // removeForm.addEventListener('submit', function(e) { // HTMX now handles this
+            //     handleRemoveTemplateFormSubmit(e, tmpl.name);
+            // });
 
             const csrfInput = document.createElement('input');
             csrfInput.type = 'hidden';
@@ -75,112 +84,36 @@ const FileListService = (function() {
             li.style.justifyContent = 'space-between';
             li.style.alignItems = 'center';
 
-            li.addEventListener('click', function(event) {
-                if (event.target.closest('form.remove-template-form')) {
-                    return; // Don't trigger file select if clicking on the remove form/button
-                }
-                // Call the provided callback when a file is selected
-                if (typeof onFileSelectCallback === 'function') {
-                    onFileSelectCallback(tmpl.name, event.currentTarget); // Pass the LI element too
-                }
-            });
+            // Event listener for file selection will be delegated from templateListElement
             
             templateListElement.appendChild(li);
         });
+
+        // After rendering the list, tell HTMX to process the new content
+        if (typeof htmx !== 'undefined' && templateListElement) {
+            htmx.process(templateListElement);
+        }
     }
 
     async function handleAddTemplateFormSubmit(event) {
-        event.preventDefault();
-        if (!addTemplateFormElement || !currentModuleId) {
-            console.error("Add template form or module ID not found in FileListService.");
-            return;
-        }
+        // event.preventDefault(); // HTMX handles this if hx-post is present.
+        // The form submission is now handled by HTMX.
+        // We can keep this function for potential future non-HTMX enhancements or logging.
+        console.log("handleAddTemplateFormSubmit called, but HTMX should be handling the submission.");
 
-        const formData = new FormData(addTemplateFormElement);
-        const newTemplateName = formData.get('new_template_name');
-        
-        if (!newTemplateName) {
-            displayDynamicMessageCallback('New template name cannot be empty.', 'error');
-            return;
-        }
-        
-        const submitButton = addTemplateFormElement.querySelector('button[type="submit"]');
-        if(submitButton) submitButton.disabled = true;
-
-        try {
-            const response = await fetch(`/admin/modules/edit/${currentModuleId}/add-template`, {
-                method: 'POST',
-                body: new URLSearchParams(formData) 
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.status === 'success') {
-                displayDynamicMessageCallback(result.message || 'Template added successfully!', 'success');
-                if (result.data && Array.isArray(result.data)) {
-                    renderTemplateList(result.data); 
-                }
-                addTemplateFormElement.reset();
-            } else {
-                displayDynamicMessageCallback(result.message || `Failed to add template (HTTP ${response.status})`, 'error');
-            }
-        } catch (error) {
-            console.error('Error adding template:', error);
-            displayDynamicMessageCallback('An unexpected error occurred while adding the template.', 'error');
-        } finally {
-            if(submitButton) submitButton.disabled = false;
-        }
+        // Clear the form input after HTMX submission (if desired, HTMX can also clear inputs)
+        // This might run before HTMX completes, or after. Consider htmx:afterRequest event for this.
+        // For now, let's assume HTMX handles form clearing or the user is okay with manual clear.
+        // If the form is part of the swapped content, it might get cleared anyway.
+        // addTemplateFormElement.reset(); // This might be too soon or conflict.
     }
 
     async function handleRemoveTemplateFormSubmit(event, templateFilename) {
-        event.preventDefault(); 
-        if (!currentModuleId || !templateFilename) {
-            displayDynamicMessageCallback('Module ID or template filename is missing.', 'error');
-            return;
-        }
-
-        if (!confirm(`Are you sure you want to remove the template '${templateFilename}'? This action cannot be undone.`)) {
-            return; 
-        }
-
-        const form = event.target;
-        const currentCsrfToken = form.querySelector('input[name="csrf_token"]').value;
-
-        if (!currentCsrfToken) {
-            displayDynamicMessageCallback('CSRF token missing. Cannot remove template.', 'error');
-            return;
-        }
-        
-        const submitButton = form.querySelector('button[type="submit"]');
-        if(submitButton) submitButton.disabled = true;
-
-        try {
-            const response = await fetch(`/admin/modules/edit/${currentModuleId}/remove-template/${templateFilename}`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-Token': currentCsrfToken,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.status === 'success') {
-                displayDynamicMessageCallback(result.message || `Template '${templateFilename}' removed successfully.`, 'success');
-                if (result.data && Array.isArray(result.data)) {
-                    renderTemplateList(result.data);
-                } else {
-                    console.warn("Updated template list not received in remove response.");
-                }
-            } else {
-                displayDynamicMessageCallback(result.message || `Failed to remove template '${templateFilename}'.`, 'error');
-            }
-        } catch (error) {
-            console.error('Error removing template:', error);
-            displayDynamicMessageCallback(`An unexpected error occurred while removing '${templateFilename}'.`, 'error');
-        } finally {
-             if(submitButton) submitButton.disabled = false;
-        }
+        // event.preventDefault(); // HTMX handles this.
+        // The form submission and confirmation (hx-confirm) are now handled by HTMX.
+        console.log(`handleRemoveTemplateFormSubmit called for ${templateFilename}, but HTMX should be handling the submission.`);
+        // The 'confirm' dialog is now handled by hx-confirm.
+        // The fetch call and manual list update are no longer needed here.
     }
 
     // Public API for FileListService
@@ -200,7 +133,7 @@ const FileListService = (function() {
             }
 
             if (addTemplateFormElement) {
-                addTemplateFormElement.addEventListener('submit', handleAddTemplateFormSubmit);
+                // addTemplateFormElement.addEventListener('submit', handleAddTemplateFormSubmit); // HTMX handles submission
             } else {
                 console.warn("Add template form element not provided to FileListService.");
             }
@@ -208,6 +141,17 @@ const FileListService = (function() {
             // Initial render if templates are provided
             if (options.initialTemplates && Array.isArray(options.initialTemplates)) {
                 renderTemplateList(options.initialTemplates);
+            }
+
+            // Event delegation for file selection
+            if (templateListElement && typeof onFileSelectCallback === 'function') {
+                templateListElement.addEventListener('click', function(event) {
+                    const listItem = event.target.closest('li[data-filename]');
+                    if (listItem && !event.target.closest('form.remove-template-form')) {
+                        const filename = listItem.dataset.filename;
+                        onFileSelectCallback(filename, listItem);
+                    }
+                });
             }
         },
         renderList: renderTemplateList // Expose for external updates if needed

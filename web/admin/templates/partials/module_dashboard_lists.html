@@ -1,0 +1,99 @@
+<h3>Active and Inactive Modules</h3>
+<div id="module-list">
+	{{/* Accessing Page specific data via .Page */}}
+	{{ if .Page.Error }}
+		<p class="gws-text-error">Error: {{ .Page.Error }}</p>
+	{{ else if not .Page.ActiveInactiveModules }}
+		<p>No active or inactive modules found.</p>
+	{{ else }}
+	       <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Slug</th>
+                    <th>Status</th>
+                    <th>Templates</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            	{{ range .Page.ActiveInactiveModules }}
+            	<tr>
+            		<td>{{ .ID }}</td>
+            		<td>{{ .Name }}</td>
+            		<td>{{ .Slug }}</td>
+            		<td>{{ if .IsActive }}Active{{ else }}Inactive{{ end }}</td>
+            		<td>{{ len .Templates }}</td>
+            		               <td>
+            		                   <!-- Edit Code Link -->
+            		                   <a href="/admin/modules/edit/{{ .ID }}" role="button" class="gws-action-link" title="Edit Code"><i class="bi bi-pencil-square"></i></a>
+          
+            		                   <!-- Delete Form/Button -->
+            		                   <form action="/admin/modules/delete/{{ .ID }}" method="POST" class="gws-inline-form"
+                                         hx-post="/admin/modules/delete/{{ .ID }}"
+                                         hx-target="#dashboard-module-lists-container"
+                                         hx-swap="innerHTML"
+                                         hx-confirm="Are you sure you want to soft-delete module '{{ .Name }}' (ID: {{ .ID }})? This will move its files to modules_removed and mark it inactive.">
+            		                       <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+            		                       <input type="hidden" name="force" value="false">
+            		                       <button type="submit" title="Delete (Soft)"><i class="bi bi-archive"></i></button>
+            		                   </form>
+            		                   <!-- Force Delete Form/Button REMOVED for active/inactive modules -->
+            		               </td>
+            		  </tr>
+            		  {{ end }}
+            </tbody>
+        </table>
+    {{ end }}
+</div>
+
+<hr class="gws-my-2"> {{/* Visual separator */}}
+
+<h3>Soft-Deleted Modules</h3>
+<div id="soft-deleted-module-list">
+    {{ if not .Page.SoftDeletedModules }}
+        <p>No soft-deleted modules found.</p>
+    {{ else }}
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Slug</th>
+                    <th>Status</th>
+                    <th>Templates</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Page.SoftDeletedModules }}
+                <tr>
+                    <td>{{ .ID }}</td>
+                    <td>{{ .Name }}</td>
+                    <td>{{ .Slug }}</td>
+                    <td>Soft-Deleted</td> {{/* Explicit status */}}
+                    <td>{{ len .Templates }}</td>
+                    <td>
+                        <!-- Edit Code Link -->
+                        <a href="/admin/modules/edit/{{ .ID }}" role="button" class="gws-action-link" title="Edit Code"><i class="bi bi-pencil-square"></i></a>
+                        
+                        <!-- Delete Form/Button (Soft Delete) REMOVED for soft-deleted modules -->
+                        
+                        <!-- Force Delete Form/Button -->
+                        <form action="/admin/modules/delete/{{ .ID }}" method="POST" class="gws-inline-form"
+                              hx-post="/admin/modules/delete/{{ .ID }}"
+                              hx-target="#dashboard-module-lists-container"
+                              hx-swap="innerHTML"
+                              hx-confirm="DANGER! Are you absolutely sure you want to FORCE DELETE module '{{ .Name }}' (ID: {{ .ID }})? This will permanently delete all its files and metadata. This action cannot be undone.">
+                            <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                            <input type="hidden" name="force" value="true">
+                            <button type="submit" class="btn-danger" title="Force Delete"><i class="bi bi-trash-fill"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    {{ end }}
+</div>
