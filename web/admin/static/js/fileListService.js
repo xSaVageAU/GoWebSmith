@@ -95,26 +95,9 @@ const FileListService = (function() {
         }
     }
 
-    async function handleAddTemplateFormSubmit(event) {
-        // event.preventDefault(); // HTMX handles this if hx-post is present.
-        // The form submission is now handled by HTMX.
-        // We can keep this function for potential future non-HTMX enhancements or logging.
-        console.log("handleAddTemplateFormSubmit called, but HTMX should be handling the submission.");
-
-        // Clear the form input after HTMX submission (if desired, HTMX can also clear inputs)
-        // This might run before HTMX completes, or after. Consider htmx:afterRequest event for this.
-        // For now, let's assume HTMX handles form clearing or the user is okay with manual clear.
-        // If the form is part of the swapped content, it might get cleared anyway.
-        // addTemplateFormElement.reset(); // This might be too soon or conflict.
-    }
-
-    async function handleRemoveTemplateFormSubmit(event, templateFilename) {
-        // event.preventDefault(); // HTMX handles this.
-        // The form submission and confirmation (hx-confirm) are now handled by HTMX.
-        console.log(`handleRemoveTemplateFormSubmit called for ${templateFilename}, but HTMX should be handling the submission.`);
-        // The 'confirm' dialog is now handled by hx-confirm.
-        // The fetch call and manual list update are no longer needed here.
-    }
+    // handleAddTemplateFormSubmit and handleRemoveTemplateFormSubmit functions
+    // are no longer needed as HTMX handles these form submissions directly.
+    // Their event listeners were previously commented out.
 
     // Public API for FileListService
     return {
@@ -133,7 +116,7 @@ const FileListService = (function() {
             }
 
             if (addTemplateFormElement) {
-                // addTemplateFormElement.addEventListener('submit', handleAddTemplateFormSubmit); // HTMX handles submission
+                // Event listener for addTemplateFormElement was removed as HTMX handles submission.
             } else {
                 console.warn("Add template form element not provided to FileListService.");
             }

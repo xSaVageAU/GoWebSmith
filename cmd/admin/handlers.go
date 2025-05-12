@@ -37,9 +37,8 @@ type PreviewRequestData struct {
 
 // dashboardHandler serves the main admin dashboard page.
 func (app *adminApplication) dashboardHandler(w http.ResponseWriter, r *http.Request) {
-	data := app.newTemplateData(r, "dashboard") // Set active nav to "dashboard"
+	data := app.newTemplateData(r, "dashboard")
 
-	// Page-specific data structure
 	pageData := DashboardPageData{
 		CurrentYear:           time.Now().Year(),
 		ActiveInactiveModules: make([]*model.Module, 0),
@@ -65,9 +64,8 @@ func (app *adminApplication) dashboardHandler(w http.ResponseWriter, r *http.Req
 			app.logger.Debug("Processed modules for dashboard", "active/inactive_count", len(pageData.ActiveInactiveModules), "soft_deleted_count", len(pageData.SoftDeletedModules))
 		}
 	}
-	data["Page"] = pageData // Embed page-specific data under "Page" key
+	data["Page"] = pageData
 
-	// Retrieve the dashboard template from cache
 	ts, ok := app.templateCache["dashboard.html"]
 	if !ok {
 		app.logger.Error("Template dashboard.html not found in cache")
@@ -75,18 +73,15 @@ func (app *adminApplication) dashboardHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Execute the layout template (which includes dashboard.html content)
 	err := ts.ExecuteTemplate(w, "layout.html", data)
 	if err != nil {
 		app.logger.Error("Error executing admin layout template", "error", err)
-		// Avoid writing header again if already sent
-		// http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		// Avoid writing header again if already sent (http.Error might panic)
 	}
 }
 
 // moduleCreateFormHandler displays the form for creating a new module.
 func (app *adminApplication) moduleCreateFormHandler(w http.ResponseWriter, r *http.Request) {
-	// Retrieve the module_form.html template from cache
 	ts, ok := app.templateCache["module_form.html"]
 	if !ok {
 		app.logger.Error("Template module_form.html not found in cache")
@@ -94,19 +89,14 @@ func (app *adminApplication) moduleCreateFormHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Prepare data
-	data := app.newTemplateData(r, "create") // Set active nav to "create"
-	// Add any page-specific data if needed. For this form, CurrentYear for the layout is important.
-	// The layout.html expects .CurrentYear directly for the footer.
-	// If newTemplateData doesn't set it, we ensure it's available.
-	data["CurrentYear"] = time.Now().Year() // Ensure CurrentYear is available for layout
+	data := app.newTemplateData(r, "create")
+	// Ensure CurrentYear is available for layout, as newTemplateData might not set it.
+	data["CurrentYear"] = time.Now().Year()
 
-	// Data for pre-filling the form and displaying errors
 	data["FormError"] = r.URL.Query().Get("error")
 	data["ModuleName"] = r.URL.Query().Get("moduleName")
 	data["CustomSlug"] = r.URL.Query().Get("customSlug")
 
-	// Execute the layout template (which includes module_form.html content)
 	err := ts.ExecuteTemplate(w, "layout.html", data)
 	if err != nil {
 		app.logger.Error("Error executing admin create form layout template", "error", err)
@@ -116,7 +106,6 @@ func (app *adminApplication) moduleCreateFormHandler(w http.ResponseWriter, r *h
 
 // moduleCreateHandler handles the submission of the new module form.
 func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. Parse form data
 	err := r.ParseForm()
 	if err != nil {
 		app.logger.Error("Error parsing create module form", "error", err)
@@ -125,30 +114,25 @@ func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.
 	}
 
 	moduleName := r.PostForm.Get("moduleName")
-	customSlug := r.PostForm.Get("customSlug") // Optional
+	customSlug := r.PostForm.Get("customSlug")
 
-	// Basic validation
 	if moduleName == "" {
 		errorMsg := "Module Name is required."
-		app.FlashErrorMessage = errorMsg // Set flash error message
-		// Redirect back to the form, keeping original values in query params for repopulation
+		app.FlashErrorMessage = errorMsg
 		redirectURL := fmt.Sprintf("/admin/modules/new?moduleName=%s&customSlug=%s",
-			url.QueryEscape(moduleName), // will be empty but good to keep consistent
+			url.QueryEscape(moduleName),
 			url.QueryEscape(customSlug))
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
 
 	if customSlug != "" {
-		// Validate customSlug format: lowercase letters, numbers, and hyphens only.
-		// Must start and end with a letter or number.
-		// This regex is similar to the HTML pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+		// Validate customSlug: lowercase letters, numbers, hyphens. Start/end with letter/number.
 		isValidSlug, _ := regexp.MatchString(`^[a-z0-9]+(?:-[a-z0-9]+)*$`, customSlug)
 		if !isValidSlug {
 			app.logger.Warn("Invalid custom slug format provided", "customSlug", customSlug)
 			errorMsg := "Invalid Custom Slug format. Use lowercase letters, numbers, and hyphens. Must start and end with a letter or number."
-			app.FlashErrorMessage = errorMsg // Set flash error message
-			// Redirect back to the form, keeping original values in query params for repopulation
+			app.FlashErrorMessage = errorMsg
 			redirectURL := fmt.Sprintf("/admin/modules/new?moduleName=%s&customSlug=%s",
 				url.QueryEscape(moduleName),
 				url.QueryEscape(customSlug))
@@ -157,36 +141,28 @@ func (app *adminApplication) moduleCreateHandler(w http.ResponseWriter, r *http.
 		}
 	}
 
-	// 2. Initialize ModuleManager if not already done (should be done in main)
-	// For now, assume app.moduleManager is available and initialized
-	// We need to add moduleManager to the adminApplication struct first!
-	// Let's assume it exists for now and fix it later.
-	if app.moduleManager == nil { // Placeholder check
+	if app.moduleManager == nil {
 		app.logger.Error("ModuleManager not initialized in admin application")
 		http.Error(w, "Internal Server Error - Configuration Error", http.StatusInternalServerError)
 		return
 	}
 
-	// 3. Call the manager's CreateModule method
-	createdModule, err := app.moduleManager.CreateModule(moduleName, customSlug) // Use app.moduleManager
+	createdModule, err := app.moduleManager.CreateModule(moduleName, customSlug)
 	if err != nil {
 		app.logger.Error("Error creating module via manager", "error", err, "moduleName", moduleName, "customSlug", customSlug)
 		app.FlashErrorMessage = fmt.Sprintf("Failed to create module '%s': %v", moduleName, err)
-		// Redirect back to the form, keeping original values in query params for repopulation
 		redirectURL := fmt.Sprintf("/admin/modules/new?moduleName=%s&customSlug=%s",
 			url.QueryEscape(moduleName),
 			url.QueryEscape(customSlug))
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
-	// 4. Redirect back to the dashboard (root path) on success
 	app.FlashSuccessMessage = fmt.Sprintf("Module '%s' created successfully.", createdModule.Name)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // moduleDeleteHandler handles the submission for deleting a module.
 func (app *adminApplication) moduleDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. Get module ID from URL parameter
 	moduleID := chi.URLParam(r, "moduleID")
 	if moduleID == "" {
 		app.logger.Error("moduleDeleteHandler: Module ID missing from URL")
@@ -221,14 +197,12 @@ func (app *adminApplication) moduleDeleteHandler(w http.ResponseWriter, r *http.
 	}
 
 	var moduleNameForMessage = moduleID
-	// Try to get module name before deletion for a more user-friendly message.
-	// This is best-effort; if it fails, we'll use the ID.
+	// Try to get module name before deletion for a user-friendly message.
 	moduleToDelete, loadErr := app.moduleManager.GetStore().LoadModule(moduleID)
 	if loadErr == nil {
 		moduleNameForMessage = moduleToDelete.Name
 	} else {
 		app.logger.Warn("moduleDeleteHandler: Could not load module before deletion for name", "moduleID", moduleID, "error", loadErr)
-		// If module doesn't exist, DeleteModule will also likely fail, which is handled next.
 	}
 
 	err = app.moduleManager.DeleteModule(moduleID, forceDelete)
@@ -243,33 +217,28 @@ func (app *adminApplication) moduleDeleteHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Successfully deleted, now prepare the updated dashboard partial.
-	// Fetch all modules again to reflect the deletion.
+	// Fetch all modules again to reflect the deletion for the partial update.
 	allModules, err := app.moduleStore.ReadAll()
 	if err != nil {
-		// This is a tricky case: deletion succeeded, but we can't refresh the list for the client.
-		// Send a success message for deletion, but also an error/warning about the list refresh.
 		app.logger.Error("moduleDeleteHandler: Module deleted, but failed to read all modules for refresh", "error", err, "moduleID", moduleID)
+		// Deletion succeeded, but list refresh for client will fail.
+		// Send success for deletion, but warn about list refresh.
 		successMessage := ""
 		if forceDelete {
-			successMessage = fmt.Sprintf("Module '%s' (ID: %s) force deleted successfully. However, the dashboard list could not be refreshed automatically.", moduleNameForMessage, moduleID)
+			successMessage = fmt.Sprintf("Module '%s' (ID: %s) force deleted. Dashboard list refresh failed.", moduleNameForMessage, moduleID)
 		} else {
-			successMessage = fmt.Sprintf("Module '%s' (ID: %s) soft-deleted successfully. However, the dashboard list could not be refreshed automatically.", moduleNameForMessage, moduleID)
+			successMessage = fmt.Sprintf("Module '%s' (ID: %s) soft-deleted. Dashboard list refresh failed.", moduleNameForMessage, moduleID)
 		}
-		// Send as a "warning" or "success" type? Let's use success for the primary action.
 		escapedSuccessMessage, _ := json.Marshal(successMessage)
+		// Use "success" type as primary action succeeded, message clarifies the secondary issue.
 		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "success"}}`, string(escapedSuccessMessage))
 		w.Header().Set("HX-Trigger", triggerEvent)
-		// HX-Reswap: none is important here because we don't have the new list to send.
-		// The client will see the success message, but the list won't update until next full page load.
-		w.Header().Set("HX-Reswap", "none")
+		w.Header().Set("HX-Reswap", "none") // Don't swap if we can't provide the new list.
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// Prepare data for the dashboard partial
 	dashboardPageData := DashboardPageData{
-		CurrentYear:           time.Now().Year(), // Though not directly used by module_dashboard_lists.html, good for consistency if it were.
 		ActiveInactiveModules: make([]*model.Module, 0),
 		SoftDeletedModules:    make([]*model.Module, 0),
 	}
@@ -281,7 +250,6 @@ func (app *adminApplication) moduleDeleteHandler(w http.ResponseWriter, r *http.
 		}
 	}
 
-	// Data to pass to the partial template. The partial expects ".Page" and ".CSRFToken"
 	partialData := map[string]any{
 		"Page":      dashboardPageData,
 		"CSRFToken": nosurf.Token(r),
@@ -299,7 +267,6 @@ func (app *adminApplication) moduleDeleteHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Prepare success flash message
 	flashMessage := ""
 	if forceDelete {
 		flashMessage = fmt.Sprintf("Module '%s' (ID: %s) force deleted successfully.", moduleNameForMessage, moduleID)
@@ -336,9 +303,8 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 	module, err := app.moduleManager.GetStore().LoadModule(moduleID)
 	if err != nil {
 		app.logger.Error("Failed to load module for editing", "moduleID", moduleID, "error", err)
-		// Differentiate between not found and other errors
-		// TODO: Use a more specific error type from storage if available
-		if err.Error() == "module metadata file not found" || os.IsNotExist(err) { // Basic check
+		// TODO: Use a more specific error type from storage if available for not found.
+		if err.Error() == "module metadata file not found" || os.IsNotExist(err) {
 			http.NotFound(w, r)
 		} else {
 			http.Error(w, "Failed to load module data", http.StatusInternalServerError)
@@ -357,9 +323,7 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 		})
 		app.logger.Debug("Sorted templates for editor view", "moduleID", moduleID)
 	}
-	// --- End Sorting ---
 
-	// Retrieve the module_editor.html template from cache
 	ts, ok := app.templateCache["module_editor.html"]
 	if !ok {
 		app.logger.Error("Template module_editor.html not found in cache")
@@ -367,14 +331,10 @@ func (app *adminApplication) moduleEditFormHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Prepare data for the template
-	// Note: There isn't a specific nav item for "edit", but we pass it for potential future use or context.
-	data := app.newTemplateData(r, "edit")
-	data["CurrentYear"] = time.Now().Year() // For layout compatibility
-	data["ModuleData"] = module             // Pass the *model.Module object (now with sorted Templates)
-	// Removed PageError and PageSuccess from here, as flash messages are handled by layout via newTemplateData
-	// data["PageError"] = r.URL.Query().Get("error")
-	// data["PageSuccess"] = r.URL.Query().Get("success")
+	data := app.newTemplateData(r, "edit") // "edit" nav item is for context.
+	data["CurrentYear"] = time.Now().Year()
+	data["ModuleData"] = module
+	// Flash messages (PageError, PageSuccess) are handled by newTemplateData.
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	err = ts.ExecuteTemplate(w, "layout.html", data) // layout.html is the entry point for cached templates
@@ -395,7 +355,6 @@ func (app *adminApplication) getModuleTemplateContentHandler(w http.ResponseWrit
 		return
 	}
 
-	// Load module metadata to get its directory
 	if app.moduleManager == nil || app.moduleManager.GetStore() == nil {
 		app.logger.Error("Module manager or store not initialized for get template content")
 		http.Error(w, "Internal Server Error - Configuration Error", http.StatusInternalServerError)
@@ -408,7 +367,6 @@ func (app *adminApplication) getModuleTemplateContentHandler(w http.ResponseWrit
 		return
 	}
 
-	// Construct the path to the template file
 	var moduleBasePath string
 	if filepath.IsAbs(module.Directory) {
 		moduleBasePath = module.Directory
@@ -640,16 +598,14 @@ func (app *adminApplication) saveModuleTemplateContentHandler(w http.ResponseWri
 		return
 	}
 
-	// Read the request body (new file content)
 	newContentBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		app.logger.Error("Failed to read request body for save template", "moduleID", moduleID, "filename", filename, "error", err)
 		http.Error(w, "Internal Server Error - Failed to read content", http.StatusInternalServerError)
 		return
 	}
-	// newContent := string(newContentBytes) // Keep as bytes for WriteFile
+	// newContent := string(newContentBytes) // Keeping as bytes for os.WriteFile
 
-	// Load module metadata to verify and get its directory
 	if app.moduleManager == nil || app.moduleManager.GetStore() == nil {
 		app.logger.Error("Module manager or store not initialized for save template")
 		http.Error(w, "Internal Server Error - Configuration Error", http.StatusInternalServerError)
@@ -662,7 +618,6 @@ func (app *adminApplication) saveModuleTemplateContentHandler(w http.ResponseWri
 		return
 	}
 
-	// Construct the path to the template file
 	var moduleBasePath string
 	if filepath.IsAbs(module.Directory) {
 		moduleBasePath = module.Directory
@@ -671,7 +626,6 @@ func (app *adminApplication) saveModuleTemplateContentHandler(w http.ResponseWri
 	}
 	templateFilePath := filepath.Join(moduleBasePath, "templates", filename)
 
-	// Ensure the filename is valid and part of the module's templates
 	foundInMeta := false
 	for _, tmplMeta := range module.Templates {
 		if tmplMeta.Name == filename {
@@ -685,9 +639,7 @@ func (app *adminApplication) saveModuleTemplateContentHandler(w http.ResponseWri
 		return
 	}
 
-	// Write the new content to the file
-	// Use 0666 for broader permissions, though 0644 is often standard.
-	// Consider making this configurable or more restrictive based on needs.
+	// Using 0666 for file permissions; consider if this needs to be more restrictive.
 	err = os.WriteFile(templateFilePath, newContentBytes, 0666)
 	if err != nil {
 		app.logger.Error("Failed to write template file", "moduleID", moduleID, "filename", filename, "path", templateFilePath, "error", err)
@@ -695,22 +647,15 @@ func (app *adminApplication) saveModuleTemplateContentHandler(w http.ResponseWri
 		return
 	}
 
-	// Update in-memory edit session if it exists
-	// editSessionMutex.Lock() // This was from the old session logic, not needed here for now
-	// if session, exists := activeEditSessions[moduleID]; exists {
-	// 	session.TemplateContents[filename] = string(newContentBytes) // Update with new content
-	// 	session.LastAccessed = time.Now()
-	// 	app.logger.Debug("Updated in-memory edit session after save", "moduleID", moduleID, "filename", filename)
-	// }
-	// editSessionMutex.Unlock()
-	// For simplicity, let's not manage the activeEditSessions on save for now.
+	// The commented-out activeEditSessions logic was here and has been removed as it's unused.
+	// For simplicity, we're not managing in-memory edit sessions on save for now.
 	// The next time the editor loads this file, it will fetch the updated content from disk.
 
 	// Update the module's LastUpdated timestamp in metadata
 	module.LastUpdated = time.Now()
 	if err := app.moduleManager.GetStore().SaveModule(module); err != nil {
 		app.logger.Error("Failed to update module metadata after saving template", "moduleID", moduleID, "filename", filename, "error", err)
-		// This is not a fatal error for the save operation itself, but should be logged.
+		// This non-fatal error for the save operation is logged.
 	}
 
 	app.logger.Info("Successfully saved template file", "moduleID", moduleID, "filename", filename, "path", templateFilePath)
@@ -718,15 +663,9 @@ func (app *adminApplication) saveModuleTemplateContentHandler(w http.ResponseWri
 	fmt.Fprintf(w, "File %s saved successfully.", filename)
 }
 
-// Define a generic JSON response structure
-type jsonResponse struct {
-	Status  string `json:"status"`         // "success" or "error"
-	Message string `json:"message"`        // User-friendly message
-	Data    any    `json:"data,omitempty"` // Optional data payload
-}
+// jsonResponse struct was here, removed as it's no longer used after HTMX refactoring.
 
-// moduleAddTemplateHandler handles the submission for adding a new template to a module.
-// It now returns an HTML partial for HTMX.
+// moduleAddTemplateHandler handles adding a new template to a module via HTMX.
 func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *http.Request) {
 	moduleID := chi.URLParam(r, "moduleID")
 	if moduleID == "" {
@@ -735,7 +674,7 @@ func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *
 		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "error"}}`, errorMessage)
 		w.Header().Set("HX-Trigger", triggerEvent)
 		w.Header().Set("HX-Reswap", "none")
-		w.WriteHeader(http.StatusOK) // Send 200 OK so HX-Trigger is processed
+		w.WriteHeader(http.StatusOK) // Respond 200 OK for HX-Trigger processing.
 		return
 	}
 
@@ -793,8 +732,7 @@ func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *
 	if err != nil {
 		app.logger.Error("moduleAddTemplateHandler: Error adding template via manager", "error", err, "moduleID", moduleID, "templateName", newTemplateName)
 		errorMessage := fmt.Sprintf("Failed to add template: %v", err)
-		// Escape the error message for JSON, as it might contain special characters
-		escapedErrorMessage, _ := json.Marshal(errorMessage) // Use Marshal to get a JSON string literal
+		escapedErrorMessage, _ := json.Marshal(errorMessage) // Ensure message is JSON-safe.
 		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
 		w.Header().Set("HX-Trigger", triggerEvent)
 		w.Header().Set("HX-Reswap", "none")
@@ -804,19 +742,15 @@ func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *
 
 	app.logger.Info("moduleAddTemplateHandler: Successfully added template, preparing HTML partial", "moduleID", moduleID, "templateName", newTemplateName)
 
-	// Prepare data for the partial template
 	partialData := map[string]any{
 		"Templates": addedModule.Templates,
 		"ModuleID":  moduleID,
 		"CSRFToken": nosurf.Token(r),
 	}
 
-	// Retrieve the cached partial template
 	tmpl, ok := app.templateCache["template_list_items.html"]
 	if !ok {
 		app.logger.Error("moduleAddTemplateHandler: Partial template 'template_list_items.html' not found in cache")
-		// Fallback or internal error handling if partial is missing
-		// For now, send a generic internal server error; ideally, this shouldn't happen if caching is correct.
 		errorMessage := "Internal Server Error - UI component missing"
 		escapedErrorMessage, _ := json.Marshal(errorMessage)
 		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
@@ -826,7 +760,6 @@ func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	// Prepare success message for HX-Trigger
 	successMessage := fmt.Sprintf("Template '%s' added successfully.", newTemplateName)
 	triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "success"}}`, successMessage)
 	w.Header().Set("HX-Trigger", triggerEvent)
@@ -836,12 +769,10 @@ func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *
 	err = tmpl.Execute(w, partialData)
 	if err != nil {
 		app.logger.Error("moduleAddTemplateHandler: Error executing template list partial", "error", err)
-		// Avoid writing header again if already sent
 	}
 }
 
-// moduleRemoveTemplateHandler handles the submission for removing a template from a module.
-// It now returns JSON instead of redirecting.
+// moduleRemoveTemplateHandler handles removing a template from a module via HTMX.
 func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, r *http.Request) {
 	moduleID := chi.URLParam(r, "moduleID")
 	templateFilename := chi.URLParam(r, "templateFilename")
@@ -893,7 +824,7 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 	if err != nil {
 		app.logger.Error("moduleRemoveTemplateHandler: Error removing template via manager", "error", err, "moduleID", moduleID, "templateFilename", templateFilename)
 		errorMessage := fmt.Sprintf("Failed to remove template '%s': %v", templateFilename, err)
-		escapedErrorMessage, _ := json.Marshal(errorMessage)
+		escapedErrorMessage, _ := json.Marshal(errorMessage) // Ensure message is JSON-safe.
 		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
 		w.Header().Set("HX-Trigger", triggerEvent)
 		w.Header().Set("HX-Reswap", "none")
@@ -901,19 +832,11 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 		return
 	}
 
-	// After successful removal, we need to fetch the updated list of templates for this module
-	// to send back to the client so it can re-render the list.
 	updatedModule, loadErr := app.moduleManager.GetStore().LoadModule(moduleID)
 	if loadErr != nil {
 		app.logger.Error("moduleRemoveTemplateHandler: Failed to reload module after template removal", "error", loadErr, "moduleID", moduleID)
-		// The removal was successful, but the list couldn't be refreshed to send back.
-		// Send a success message for the removal, but also indicate the refresh issue.
-		// This is a mixed case, still send 200 OK and HX-Trigger, but the message reflects the partial success/issue.
-		// For simplicity, we'll still send the HX-Trigger for success of removal, and the client won't get an updated list.
-		// A more advanced solution might involve a different event or specific client handling.
-		// For now, we will send the success message for removal, and the client will see the old list until next refresh.
-		// OR, we can send an error message that the list couldn't be refreshed.
-		// Let's opt for an error message that the list couldn't be refreshed, as the primary action of this handler is to provide the updated list.
+		// Primary action (removal) succeeded, but list refresh for client will fail.
+		// Send error message indicating the list couldn't be refreshed.
 		errorMessage := fmt.Sprintf("Template '%s' removed, but failed to refresh list for display.", templateFilename)
 		escapedErrorMessage, _ := json.Marshal(errorMessage)
 		triggerEvent := fmt.Sprintf(`{"showMessage": {"message": %s, "type": "error"}}`, string(escapedErrorMessage))
@@ -931,7 +854,6 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 		"CSRFToken": nosurf.Token(r),
 	}
 
-	// Retrieve the cached partial template
 	tmpl, ok := app.templateCache["template_list_items.html"]
 	if !ok {
 		app.logger.Error("moduleRemoveTemplateHandler: Partial template 'template_list_items.html' not found in cache")
@@ -944,7 +866,6 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 		return
 	}
 
-	// Prepare success message for HX-Trigger
 	successMessage := fmt.Sprintf("Template '%s' removed successfully.", templateFilename)
 	triggerEvent := fmt.Sprintf(`{"showMessage": {"message": "%s", "type": "success"}}`, successMessage)
 	w.Header().Set("HX-Trigger", triggerEvent)
@@ -954,6 +875,5 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 	err = tmpl.Execute(w, partialData)
 	if err != nil {
 		app.logger.Error("moduleRemoveTemplateHandler: Error executing template list partial", "error", err)
-		// Avoid writing header again if already sent
 	}
 }
