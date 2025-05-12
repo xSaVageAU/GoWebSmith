@@ -62,42 +62,24 @@ func sanitizePackageName(name string) string {
 
 // DefaultGeneratorConfig provides a standard configuration for module generation.
 func DefaultGeneratorConfig(baseDir string) Config {
-	// Updated default content for base.html - Wraps style call, uses .Module/.RenderedContent
+	// Barebones default content for base.html
 	const defaultBaseHTMLContent = `{{ define "page" }}
-<div class="module-content"> <!-- Added a wrapper div -->
-    <style>
-        {{/* Pass the .Module field from PageData to the style template */}}
-        {{ template "module-style" .Module }}
-    </style>
-    <h2>Module: {{ .Module.Name }} (ID: {{ .Module.ID }})</h2>
-    <p>This is the base template for the module.</p>
-    {{/* <p>Status: {{ .Module.Status }}</p>  Removed, using IsActive now */}}
-    <!-- Inject pre-rendered content from Go handler -->
-    {{ .RenderedContent }}
-</div>
+	   <style>
+	       {{ template "module-style" .Module }}
+	   </style>
+	   {{ .RenderedContent }}
 {{ end }}`
 
-	// Updated default content for style.css - Uses HTML comments
+	// Barebones default content for style.css
 	const defaultStyleCSSContent = `{{ define "module-style" }}
-<!-- Base styles for module {{ .Name }} -->
-
-<!-- Add specific styles for your module below -->
-
-<!--
- * ==== SUB-TEMPLATES STYLES ====
- * CSS for sub-templates will be added below this line
- -->
+/* Styles for module {{ .Name }} */
 {{ end }}`
 
-	// --- NEW: Default content for content.html ---
+	// Barebones default content for content.html
 	const defaultContentHTMLContent = `{{ define "content" }}
-<!-- Default content for module {{ .Name }} -->
-<div class="default-content">
-    <p>This is the default content template (content.html).</p>
-    <p>Module ID: {{ .ID }}</p>
-</div>
+<!-- Content for module {{ .Name }} (ID: {{ .ID }}) -->
+<p>This is the default content for {{ .Name }} (ID: {{ .ID }})</p>
 {{ end }}`
-	// --- END NEW ---
 
 	handlerGoContent := `package {{ .PackageName }} // Dynamic package name
 

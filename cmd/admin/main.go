@@ -13,6 +13,7 @@ import (
 	"go-module-builder/internal/storage" // Added for storage interface
 
 	"github.com/justinas/nosurf" // Added for CSRF token in template data
+	"github.com/spf13/viper"     // Added for configuration management
 )
 
 // adminApplication holds the application-wide dependencies for the admin server.
@@ -162,9 +163,27 @@ func main() {
 		templateCache: templateCache, // Assign the initialized cache
 	}
 
-	// --- Configuration (Placeholder) ---
-	// TODO: Integrate with Viper or flags later
-	adminPort := "8081"
+	// --- Configuration ---
+	viper.SetConfigName("config")    // name of config file (without extension)
+	viper.SetConfigType("yaml")      // REQUIRED if the config file does not have the extension in the name
+	viper.AddConfigPath(".")         // look for config in the working directory
+	viper.SetEnvPrefix("GOWS_ADMIN") // Prefix for environment variables for admin server
+	viper.AutomaticEnv()             // Read in environment variables that match
+
+	// Set default values
+	viper.SetDefault("admin_server.port", "8081")
+
+	// Read the config file
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			logger.Warn("config.yaml not found, using default admin server port.")
+		} else {
+			logger.Error("Fatal error reading config file for admin server", "error", err)
+			os.Exit(1)
+		}
+	}
+
+	adminPort := viper.GetString("admin_server.port")
 
 	// --- Start Server ---
 	addr := ":" + adminPort

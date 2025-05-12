@@ -4,4 +4,8 @@ server:
   certFile: "cert.pem"
   keyFile: "key.pem"
 
+# Admin Server Configuration
+admin_server:
+  port: "8081"
+
 # Add other configuration sections as needed
