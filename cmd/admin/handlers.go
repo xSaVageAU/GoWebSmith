@@ -740,6 +740,17 @@ func (app *adminApplication) moduleAddTemplateHandler(w http.ResponseWriter, r *
 		return
 	}
 
+	// --- Sort Templates by Order, then Name ---
+	if addedModule != nil && addedModule.Templates != nil {
+		sort.SliceStable(addedModule.Templates, func(i, j int) bool {
+			if addedModule.Templates[i].Order != addedModule.Templates[j].Order {
+				return addedModule.Templates[i].Order < addedModule.Templates[j].Order
+			}
+			return addedModule.Templates[i].Name < addedModule.Templates[j].Name
+		})
+		app.logger.Debug("Sorted templates after adding for partial view", "moduleID", moduleID)
+	}
+
 	app.logger.Info("moduleAddTemplateHandler: Successfully added template, preparing HTML partial", "moduleID", moduleID, "templateName", newTemplateName)
 
 	partialData := map[string]any{
@@ -844,6 +855,17 @@ func (app *adminApplication) moduleRemoveTemplateHandler(w http.ResponseWriter, 
 		w.Header().Set("HX-Reswap", "none")
 		w.WriteHeader(http.StatusOK)
 		return
+	}
+
+	// --- Sort Templates by Order, then Name ---
+	if updatedModule != nil && updatedModule.Templates != nil {
+		sort.SliceStable(updatedModule.Templates, func(i, j int) bool {
+			if updatedModule.Templates[i].Order != updatedModule.Templates[j].Order {
+				return updatedModule.Templates[i].Order < updatedModule.Templates[j].Order
+			}
+			return updatedModule.Templates[i].Name < updatedModule.Templates[j].Name
+		})
+		app.logger.Debug("Sorted templates after removing for partial view", "moduleID", moduleID)
 	}
 
 	app.logger.Info("moduleRemoveTemplateHandler: Successfully removed template, preparing HTML partial", "moduleID", moduleID, "templateFilename", templateFilename)
