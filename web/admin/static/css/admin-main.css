@@ -447,3 +447,39 @@ select {
 .gws-ml-1 { /* Utility for margin-left: 1em */
     margin-left: 1em;
 }
+/* --- Flash Message Overlay Styles --- */
+.gws-flash-message {
+    position: fixed;
+    top: 1.5rem; /* Position from the top */
+    left: 50%; /* Center horizontally */
+    transform: translateX(-50%); /* Adjust horizontal centering */
+    z-index: 1100; /* Ensure it's above most other elements */
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-md);
+    min-width: 300px; /* Minimum width */
+    max-width: 600px; /* Maximum width */
+    text-align: center;
+    border: 1px solid transparent; /* Base border */
+}
+
+.gws-flash-message p {
+    margin: 0; /* Remove default paragraph margin */
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.gws-flash-success {
+    background-color: rgba(16, 185, 129, 0.9); /* Semi-opaque green */
+    color: #fff; /* White text */
+    border-color: var(--green);
+}
+
+.gws-flash-error {
+    background-color: rgba(244, 63, 94, 0.9); /* Semi-opaque red */
+    color: #fff; /* White text */
+    border-color: var(--red);
+}
+
+/* Optional: Add styles for a close button if implemented */
+/* .gws-flash-message .close-button { ... } */

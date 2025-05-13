@@ -230,33 +230,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
     function displayDynamicMessage(message, type = 'success') {
-        if (!dynamicMessageContainer) {
-            console.warn("Dynamic message container not found. Message:", message);
-            alert(`${type.toUpperCase()}: ${message}`); 
-            return;
-        }
-        dynamicMessageContainer.innerHTML = '';
+        // Create the main message div
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('gws-flash-message');
+        messageDiv.classList.add(type === 'error' ? 'gws-flash-error' : 'gws-flash-success');
+        messageDiv.setAttribute('role', 'alert');
+
+        // Create the paragraph inside the div
         const messageP = document.createElement('p');
-        messageP.style.padding = "0.5em";
-        messageP.style.border = `1px solid var(--${type === 'error' ? 'red' : 'green'})`;
-        messageP.style.backgroundColor = `rgba(${type === 'error' ? '244,63,94,0.1' : '16,185,129,0.1'})`;
-        messageP.style.color = `var(--${type === 'error' ? 'red' : 'green'})`;
         if (type === 'error') {
             messageP.innerHTML = `<strong>Error:</strong> ${escapeHtml(message)}`;
         } else {
             messageP.innerHTML = `<strong>Success:</strong> ${escapeHtml(message)}`;
         }
-        
-        dynamicMessageContainer.appendChild(messageP);
-        dynamicMessageContainer.style.display = 'block';
-        dynamicMessageContainer.style.marginBottom = '1rem'; 
+        messageDiv.appendChild(messageP);
 
+        // Append to body to make it an overlay
+        document.body.appendChild(messageDiv);
+
+        // Remove the message after 5 seconds
         setTimeout(() => {
-            if (dynamicMessageContainer) {
-                dynamicMessageContainer.style.display = 'none';
-                dynamicMessageContainer.innerHTML = '';
+            if (messageDiv && messageDiv.parentNode === document.body) {
+                document.body.removeChild(messageDiv);
             }
-        }, 5000); 
+        }, 5000);
     }
 
     // renderTemplateList, handleAddTemplateFormSubmit, handleRemoveTemplateFormSubmit are now in FileListService

@@ -37,18 +37,16 @@
 
     <main class="gws-main-content"> <!-- Add class to main for styling -->
         {{/* Display Flash Messages */}}
-        {{ if .FlashSuccess }}
-        <div class="gws-form-group" style="margin-bottom: 1rem;">
-            <p style="padding: 0.5em; border: 1px solid var(--green); background-color: rgba(16,185,129,0.1); color: var(--green);">
-                <strong>Success:</strong> {{ .FlashSuccess }}
-            </p>
+        {{ with .FlashSuccess }}
+        <div class="gws-flash-message gws-flash-success" role="alert">
+            <p><strong>Success:</strong> {{ . }}</p>
+            <!-- Optional: Add a close button here -->
         </div>
         {{ end }}
-        {{ if .FlashError }}
-        <div class="gws-form-group" style="margin-bottom: 1rem;">
-            <p class="gws-text-error" style="padding: 0.5em; border: 1px solid var(--red); background-color: rgba(244,63,94,0.1);">
-                <strong>Error:</strong> {{ .FlashError }}
-            </p>
+        {{ with .FlashError }}
+        <div class="gws-flash-message gws-flash-error" role="alert">
+            <p><strong>Error:</strong> {{ . }}</p>
+            <!-- Optional: Add a close button here -->
         </div>
         {{ end }}
 
