@@ -1,45 +1,76 @@
 # GoWebSmith Project
 
-GoWebSmith is a comprehensive Go-based ecosystem designed for modular web development. It empowers developers to build dynamic websites by creating, managing, and composing reusable web components ("modules"). The project features a powerful command-line interface (CLI) for module lifecycle management, a user-friendly Admin UI for visual editing and administration, and a dynamic web server that intelligently discovers and renders these modules.
+**GoWebSmith** empowers you to build powerful and maintainable web applications in Go. It's designed around a **modulithic architecture**, offering the deployment simplicity of a single unit while fostering strong internal modularity. This approach, combined with modern server-driven UI patterns (inspired by principles like "Hypermedia as the Engine of Application State"), allows for rich user experiences with streamlined development.
+
+At its core, GoWebSmith is evolving to help you structure your website by composing **Pages** from reusable **Modules (Components)**. You build a library of independent UI components (Modules), each with its own templates and styling. Then, you define Pages that arrange these Modules within a chosen layout, creating cohesive and interactive web experiences.
+
+*(The GIF below demonstrates the current workflow, which treats each page as a manageable "module." This will evolve as we fully implement the Page/Module component architecture.)*
+
+See this page-centric, modulithic workflow in action! This GIF demonstrates how GoWebSmith brings this approach to life:
+*   Rapidly creating a new page (currently termed a module).
+*   Editing its content templates, showcasing the live preview capabilities.
+*   Adding new templates to enrich the page's structure or style.
+*   Viewing the fully assembled, server-rendered page-module as a user would.
+*   And finally, managing the module's lifecycle, including deletion.
+
+![GoWebSmith-gif](https://github.com/user-attachments/assets/24eee301-85d4-4a7b-aa96-37d0d876df07)
+
+This robust system is made possible by GoWebSmith's integrated components:
+
+*   An **intuitive Admin UI** for managing your library of Modules (components), editing their templates with live previews, and (in the future) visually composing Pages.
+*   A **command-line interface (CLI)** for efficient scaffolding of Modules, managing their lifecycle, and (in the future) defining Page structures.
+*   A **dynamic web server** that discovers your Pages and Modules, assembles them on demand, and serves the content to users.
+
+## Core Vision: Pages Composing Modules
+
+GoWebSmith is evolving towards a clear distinction between:
+
+1.  **Modules (Components):** Reusable, self-contained UI building blocks (e.g., a navigation bar, product card, hero banner). Each Module has its own templates (HTML, CSS, etc.) and can be configured.
+2.  **Pages:** The actual web pages users visit, defined by a URL slug. Each Page specifies a layout and an arrangement of Module instances, each potentially with unique configurations.
+
+This approach promotes:
+*   **Reusability:** Use the same Module in multiple places across different Pages.
+*   **Maintainability:** Update a Module once, and the changes reflect everywhere it's used.
+*   **Scalability:** Easily manage complex sites by breaking them into manageable components and compositions.
 
 ## Core Components
 
-1.  **Admin UI (`cmd/admin/`)**: A web-based interface running on `http://localhost:8081` for managing modules. It provides:
-    *   A dashboard to view active, inactive, and soft-deleted modules.
-    *   Forms for creating new modules, specifying names and custom URL slugs.
-    *   An integrated code editor (CodeMirror) for editing module template files (HTML, CSS, JS, TMPL) with live preview.
-    *   Functionality to add new template files to modules and remove existing ones.
-    *   Options for soft-deleting (archiving) and force-deleting modules.
+1.  **Admin UI (`cmd/admin/`)**: A web-based interface on `http://localhost:8081`.
+    *   Dashboard to view and manage your library of UI Modules (components).
+    *   Forms for creating new Modules.
+    *   Integrated CodeMirror editor for Module template files (HTML, CSS, JS, TMPL) with live preview.
+    *   Functionality to add/remove template files within Modules.
+    *   Options for soft-deleting (archiving) and force-deleting Modules.
+    *   *(Future: Will include tools for creating and editing Pages, arranging Modules within them.)*
 
-2.  **Builder CLI (`cmd/builder-cli/`)**: A command-line tool for scaffolding, managing, and maintaining modules. Key features include:
-    *   Module creation with a standardized directory structure (`modules/{moduleID}/templates/`) and boilerplate files (e.g., `base.html`, `content.html`, `style.css`).
-    *   Automatic generation and management of module metadata in JSON format (stored in `.module_metadata/`).
-    *   Adding new template files to existing modules.
-    *   Updating module metadata (name, slug, group, layout, description).
-    *   Soft deletion (moves module files to `modules_removed/` and marks as inactive) and hard deletion (permanent removal).
-    *   Purging all soft-deleted modules.
-    *   Previewing module output in a browser.
+2.  **Builder CLI (`cmd/builder-cli/`)**: A command-line tool for managing Modules.
+    *   Module creation with standardized directory structure (`modules/{moduleID}/templates/`) and boilerplate files.
+    *   Automatic generation/management of Module metadata (JSON in `.module_metadata/`).
+    *   Adding/updating Module metadata (name, group, description).
+    *   Soft and hard deletion of Modules.
+    *   *(Future: Will include commands for Page creation, and managing Module placement on Pages.)*
 
-3.  **Main Web Server (`cmd/server/`)**: A dynamic Go web server that serves the composed web pages. It:
-    *   Runs on `https://localhost:8443` by default (configurable via `config.yaml`), using HTTPS with self-signed certificates generated if not present.
-    *   Discovers active modules by reading their JSON metadata.
-    *   Loads and parses module templates (HTML, CSS, TMPL).
-    *   Serves module pages dynamically based on their URL slugs (e.g., `/my-module-slug`).
-    *   Renders module content by processing templates in the order specified in their metadata, injecting the combined output into a base layout.
-    *   Supports HTMX for enhanced client-side interactions and partial page updates.
-    *   Serves global static assets and module-specific static assets.
+3.  **Main Web Server (`cmd/server/`)**: The dynamic Go web server.
+    *   Runs on `https://localhost:8443` by default (configurable).
+    *   Discovers Modules (and future Pages) via metadata.
+    *   Loads and parses Module templates.
+    *   *(Current: Serves "page-modules" based on their URL slugs.)*
+    *   *(Future: Will serve Pages by composing them from multiple Module instances based on Page metadata.)*
+    *   Supports HTMX for dynamic client-side interactions.
+    *   Serves global and Module-specific static assets.
 
 ## Features
 
-*   **Modular Architecture**: Build websites by combining independent, reusable components.
-*   **CLI for Developers**: Efficiently manage module lifecycle through a comprehensive set of commands.
-*   **Visual Admin UI**: Intuitive web interface for module management and template editing with live previews.
-*   **Dynamic Rendering**: Server intelligently assembles pages from modules based on metadata.
-*   **Templating**: Uses Go's `html/template` package for server-side rendering.
-*   **Configuration**: Server behavior (port, certificates) managed via `config.yaml`.
-*   **HTMX Integration**: Enables modern, dynamic user experiences with partial page updates.
-*   **Static Asset Serving**: Handles both global and module-specific static files.
-*   **Metadata Driven**: Module behavior and rendering controlled by JSON metadata files.
+*   **Modulithic Architecture**: Simplicity of a single deployable unit with strong internal modularity.
+*   **Component-Based Design**: Build websites by combining independent, reusable Modules (components). *(Evolving feature)*
+*   **CLI for Developers**: Efficiently manage Module lifecycle.
+*   **Visual Admin UI**: Intuitive web interface for Module management and template editing.
+*   **Dynamic Rendering**: Server intelligently assembles content.
+*   **Templating**: Uses Go's `html/template` package.
+*   **Configuration**: Server behavior managed via `config.yaml`.
+*   **HTMX Integration**: Enables modern, dynamic user experiences.
+*   **Static Asset Serving**: Handles global and Module-specific static files.
+*   **Metadata Driven**: Behavior and rendering controlled by JSON metadata.
 
 ## Project Structure
 
@@ -48,13 +79,14 @@ GoWebSmith is a comprehensive Go-based ecosystem designed for modular web develo
 *   `cmd/server/`: Source code for the Main Web Server.
 *   `internal/`: Shared packages:
     *   `generator/`: Module boilerplate generation.
-    *   `model/`: Data structures (`Module`, `Template`).
+    *   `model/`: Data structures (`Module`, `Template`, *Future: `Page`*).
     *   `modulemanager/`: Core logic for module management operations.
-    *   `storage/`: Metadata persistence (JSON-based).
+    *   `storage/`: Metadata persistence (JSON-based, *Future: Page metadata store*).
     *   `templating/`: Server-side template processing.
-*   `modules/`: Root directory for active module files. Each module resides in a subdirectory named by its ID (e.g., `modules/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/`).
-*   `modules_removed/`: Directory for soft-deleted module files.
-*   `.module_metadata/`: Stores JSON metadata files for each module.
+*   `modules/`: Root directory for active Module (component) files. Each resides in a subdirectory named by its ID.
+*   `modules_removed/`: Directory for soft-deleted Module files.
+*   `.module_metadata/`: Stores JSON metadata files for each Module (component).
+*   *Future: `.page_metadata/`: Will store JSON metadata for Pages.*
 *   `web/`:
     *   `admin/`: Static assets (CSS, JS) and HTML templates for the Admin UI.
     *   `static/`: Global static assets for the Main Web Server.
@@ -104,8 +136,8 @@ GoWebSmith is a comprehensive Go-based ecosystem designed for modular web develo
     # For Linux/macOS
     ./admin
     ```
-*   The Admin UI runs on port `8081` by default. This can be configured in `config.yaml` under the `admin_server.port` key.
-*   Access the Admin UI in your browser at: `http://localhost:{ADMIN_PORT}` (e.g., `http://localhost:8081`)
+*   The Admin UI runs on port `8081` by default (configurable in `config.yaml`).
+*   Access: `http://localhost:{ADMIN_PORT}` (e.g., `http://localhost:8081`)
 
 ### 2. Running the Main Web Server
 
@@ -116,19 +148,16 @@ GoWebSmith is a comprehensive Go-based ecosystem designed for modular web develo
     # For Linux/macOS
     ./server
     ```
-*   The server will start on `https://localhost:8443` by default.
-*   If `cert.pem` and `key.pem` are not found in the project root, they will be automatically generated (self-signed). Your browser will likely show a security warning for self-signed certificates; you'll need to proceed to access the site.
-*   Server port and certificate paths can be configured in `config.yaml`.
-*   Optionally, enable the module list page:
-    ```bash
-    .\server.exe -toggle-module-list
-    ```
+*   The server starts on `https://localhost:8443` by default.
+*   Self-signed certificates (`cert.pem`, `key.pem`) are auto-generated if missing (expect browser warnings).
+*   Configuration: `config.yaml`.
+*   Optional module list page: `.\server.exe -toggle-module-list`
 
 ### 3. Using the Builder CLI
 
-The Builder CLI (`builder-cli.exe` or `./builder-cli`) provides the following commands:
+The Builder CLI (`builder-cli.exe` or `./builder-cli`) provides commands for managing "Modules" (which will evolve to mean "components"). Page management commands will be added in the future.
 
-*   **`list`**: Lists all known modules.
+*   **`list`**: Lists all known modules (currently page-like modules).
     ```bash
     .\builder-cli list
     ```
@@ -137,51 +166,44 @@ The Builder CLI (`builder-cli.exe` or `./builder-cli`) provides the following co
     ```bash
     .\builder-cli create -name "My New Module" [-slug "my-custom-slug"]
     ```
-    *   `-name`: (Required) The user-friendly name for the module.
-    *   `-slug`: (Optional) A custom URL-friendly slug. If omitted, the module's UUID will be used.
+    *   `-name`: (Required) The user-friendly name.
+    *   `-slug`: (Optional) A custom URL-friendly slug (relevant for current page-module behavior).
 
 *   **`update`**: Updates module metadata.
     ```bash
     .\builder-cli update -id <module-id> [-name <new-name>] [-slug <new-slug>] [-group <group>] [-layout <layout>] [-desc <description>]
     ```
-    *   `-id`: (Required) The ID of the module to update.
-    *   Provide at least one of the optional flags to update corresponding metadata.
 
 *   **`delete`**: Deletes modules.
     ```bash
-    # Soft delete (moves files to modules_removed/, marks inactive)
+    # Soft delete
     .\builder-cli delete -id <module-id>
 
-    # Hard delete (permanently removes files and metadata)
+    # Hard delete
     .\builder-cli delete -id <module-id> --force
 
-    # DANGER: Delete ALL modules and metadata (for development)
+    # DANGER: Nuke all
     .\builder-cli delete --nuke-all
     ```
-    *   `-id`: (Required unless using `--nuke-all`) Comma-separated IDs of modules to delete.
-    *   `--force`: (Optional) Permanently deletes files and metadata.
-    *   `--nuke-all`: (Optional, DANGEROUS) Deletes all module files and metadata.
 
 *   **`add-template`**: Adds a new template file to a module.
     ```bash
     .\builder-cli add-template -moduleId <module-id> -name <template-filename.ext>
     ```
-    *   `-moduleId`: (Required) The ID of the module.
-    *   `-name`: (Required) The filename for the new template (e.g., `card.html`, `custom-styles.css`).
 
-*   **`preview`**: Generates a preview of a module and attempts to open it in the browser.
+*   **`preview`**: Generates a preview of a module.
     ```bash
     .\builder-cli preview -id <module-id>
     ```
 
-*   **`purge-removed`**: Permanently deletes all modules that have been soft-deleted.
+*   **`purge-removed`**: Permanently deletes all soft-deleted modules.
     ```bash
     .\builder-cli purge-removed
     ```
 
 ## Configuration
 
-The project uses a `config.yaml` file in the project root for configuration:
+The project uses a `config.yaml` file in the project root:
 
 ```yaml
 # Main Web Server Configuration
@@ -196,32 +218,65 @@ admin_server:
 
 # Add other configuration sections as needed
 ```
-*   **Main Web Server**: Settings for the primary content-serving server. Command-line flags for `server.exe` can override these.
-*   **Admin Server**: Settings for the Admin UI.
+## How It Works (Current & Evolving)
 
-## How It Works
+Currently, GoWebSmith primarily treats each URL-addressable part of your site as a self-contained "Module." This "Module" has its own `base.html` and other templates, which are assembled and served when its URL is requested.
 
-1.  **Module Creation (CLI/Admin UI)**:
-    *   A unique ID is generated for the module.
-    *   A directory `modules/{moduleID}/templates/` is created.
-    *   Boilerplate template files (e.g., `base.html`, `content.html`, `style.css`) are generated within the module's `templates` directory.
-    *   A JSON metadata file (`.module_metadata/{moduleID}.json`) is created, storing information like name, slug, creation/update times, active status, and a list of its template files with their rendering order.
+**The architecture is evolving towards a more granular component-based system:**
 
-2.  **Template Editing (Admin UI)**:
-    *   Users can select a module and then a template file to edit.
-    *   The content is loaded into a CodeMirror editor.
-    *   Changes can be saved back to the file.
-    *   A live preview updates as the user types (debounced).
+1.  **Module (Component) Creation (CLI/Admin UI):**
+    *   A unique ID is generated for a reusable UI component (e.g., "Product Card," "Navigation Menu").
+    *   A directory `modules/{moduleID}/templates/` is created containing templates specific to that component (e.g., `card_content.html`, `card_styles.css`). It will not contain a full page `base.html`.
+    *   A JSON metadata file (`.module_metadata/{moduleID}.json`) stores the component's definition (name, description, its template files, configuration options it accepts).
 
-3.  **Server Rendering (Main Server)**:
-    *   On startup, the server scans `.module_metadata/` to discover all modules.
-    *   For active modules, it parses their template files.
-    *   When a request comes for a module page (e.g., `/my-module-slug`):
-        *   The server identifies the module by its slug.
-        *   It retrieves the module's `base.html` and its other associated templates (e.g., `content.html`, `style.css`).
-        *   Sub-templates are rendered in the order specified in the module's metadata.
-        *   The combined output of these sub-templates is injected into the `{{ .RenderedContent }}` placeholder within the module's `base.html`.
-        *   The final HTML is sent to the client.
-    *   HTMX requests can trigger partial updates, where only specific template blocks are rendered and swapped on the client side.
+2.  **Page Creation & Composition (Future - CLI/Admin UI):**
+    *   A new "Page" entity will be defined (e.g., "Homepage," "Product Listing") with its own metadata, likely in a `.page_metadata/` directory.
+    *   Page metadata will specify:
+        *   A unique Page ID, Name, and URL Slug.
+        *   A global layout template to use (e.g., from `web/templates/default_layout.html`).
+        *   A list of **Module Instances**. Each instance defines:
+            *   Which reusable Module (component) ID to use.
+            *   Which placeholder in the global layout it should be rendered into (e.g., "header," "sidebar," "main_content").
+            *   An order for rendering if multiple Modules share a placeholder.
+            *   Instance-specific configuration data to be passed to the Module during rendering.
 
-This modular approach allows for flexible and maintainable web development, where different parts of a page can be developed and managed independently.
+3.  **Template Editing (Admin UI):**
+    *   Users will select a Module (component) and edit its specific template files.
+    *   The live preview will show the component, potentially within a configurable test page context or in isolation.
+
+4.  **Server Rendering (Main Web Server - Evolved):**
+    *   On startup, the server will scan for Page and Module (component) metadata.
+    *   When a request comes for a Page URL (e.g., `/homepage`):
+        *   The server loads the Page's metadata.
+        *   It identifies the global layout template and the list of Module instances to render.
+        *   For each Module instance:
+            *   It loads the specified reusable Module (component).
+            *   It renders the Module's primary template(s), passing any instance-specific configuration from the Page's metadata.
+        *   The rendered HTML output for each Module instance is then injected into its designated placeholder within the global layout template.
+        *   The fully assembled Page HTML is sent to the client.
+    *   HTMX will continue to be leveraged for dynamic interactions, potentially updating individual Module instances or sections of a Page.
+
+This refined approach will allow for greater flexibility and reusability, enabling the construction of complex web applications from a well-defined library of components, composed into distinct Pages.
+
+## Future Improvements & Roadmap
+
+GoWebSmith is an evolving project. Here are some areas we're actively exploring and planning:
+
+*   **Full Page & Module (Component) Architecture:**
+    *   Complete the transition to distinct "Pages" (URL-addressable views) and "Modules" (reusable UI components).
+    *   Implement a robust "Page Management" system for composing Pages from a library of shared Modules.
+    *   Allow Module instances on a Page to have unique configurations.
+*   **Advanced Admin UI for Page Composition:**
+    *   Develop tools within the Admin UI for visually or declaratively assembling Pages by selecting, arranging, and configuring Modules within layout placeholders.
+*   **Theme Engine/Global Styling:**
+    *   Mechanisms for global theme application and easier customization of site-wide aesthetics.
+*   **Data Source Integration:**
+    *   Flexible ways for Modules to fetch and display dynamic data from various sources.
+*   **User Authentication and Authorization:**
+    *   Integrating access control for the Admin UI and potentially for different site sections.
+*   **Plugin System:**
+    *   Exploring a plugin architecture to extend GoWebSmith's core functionality.
+*   **Internationalization (i18n) and Localization (l10n).**
+*   **Continued Performance Optimizations and Deployment Strategies.**
+
+We welcome community feedback and contributions as we work towards these goals!
